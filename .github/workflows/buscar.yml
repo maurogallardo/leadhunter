@@ -1,0 +1,144 @@
+name: Buscar
+
+# Solo se lanza a mano: GitHub -> Actions -> "Buscar" -> Run workflow.
+# Busca en Google Maps con gosom, limpia los resultados y los guarda en Supabase.
+# Nunca muestra datos de negocios en el log: solo números y estados.
+on:
+  workflow_dispatch:
+    inputs:
+      consulta:
+        description: 'Búsqueda en Google Maps (una sola línea). Ej: distribuidoras de alimentos en Córdoba, Argentina'
+        required: true
+        type: string
+      rubro:
+        description: 'Rubro, escrito IGUAL que en la tabla rubros. Ej: Distribuidoras de alimentos y bebidas'
+        required: true
+        type: string
+      profundidad:
+        description: 'Profundidad de 1 a 5 (más = más resultados, más tiempo y más riesgo de bloqueo). Recomendado: 1'
+        required: true
+        type: number
+        default: 1
+
+permissions:
+  contents: read
+
+# Si se lanza varias veces, las corridas esperan en fila (no se cancelan).
+concurrency:
+  group: leadhunter-buscar
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  buscar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # Versión FIJA de la imagen oficial (no "latest"), igual que en prueba-google.yml.
+      GOSOM_IMAGE: gosom/google-maps-scraper:v1.19.0
+      # Carpeta de trabajo fuera del repo. Nada de esto se sube.
+      WORK: /tmp/leadhunter-buscar
+      PROFUNDIDAD_MAXIMA: '5'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Los datos de entrada se pasan por variables de entorno y se usan
+      # entre comillas: nunca se pegan dentro del script (evita inyección).
+      - name: Validar datos de entrada y crear queries.txt
+        env:
+          CONSULTA: ${{ inputs.consulta }}
+          RUBRO: ${{ inputs.rubro }}
+          PROFUNDIDAD: ${{ inputs.profundidad }}
+        run: |
+          set -euo pipefail
+          case "$CONSULTA" in
+            *$'\n'* | *$'\r'*) echo "ERROR: la consulta tiene que ser una sola linea."; exit 1 ;;
+          esac
+          if [ -z "${CONSULTA//[[:space:]]/}" ]; then echo "ERROR: la consulta esta vacia."; exit 1; fi
+          if [ "${#CONSULTA}" -gt 200 ]; then echo "ERROR: la consulta es demasiado larga (maximo 200 caracteres)."; exit 1; fi
+          if [ -z "${RUBRO//[[:space:]]/}" ]; then echo "ERROR: el rubro esta vacio."; exit 1; fi
+          if ! [[ "$PROFUNDIDAD" =~ ^[0-9]+$ ]] || [ "$PROFUNDIDAD" -lt 1 ] || [ "$PROFUNDIDAD" -gt "$PROFUNDIDAD_MAXIMA" ]; then
+            echo "ERROR: la profundidad tiene que ser un numero entero de 1 a $PROFUNDIDAD_MAXIMA."
+            exit 1
+          fi
+          mkdir -p "$WORK/out"
+          printf '%s\n' "$CONSULTA" > "$WORK/queries.txt"
+          echo "Datos de entrada OK. Profundidad: $PROFUNDIDAD"
+
+      - name: Instalar Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26
+
+      - name: Instalar dependencias y compilar el importador
+        working-directory: scraper
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+
+      - name: Descargar imagen de gosom
+        run: docker pull --quiet "$GOSOM_IMAGE"
+
+      - name: Correr gosom (salida a archivo, no se muestra)
+        env:
+          PROFUNDIDAD: ${{ inputs.profundidad }}
+        run: |
+          inicio=$(date +%s)
+          set +e
+          timeout 45m docker run --rm --name gosom-buscar \
+            -e DISABLE_TELEMETRY=1 \
+            -v "$WORK/queries.txt:/queries.txt:ro" \
+            -v "$WORK/out:/out" \
+            "$GOSOM_IMAGE" \
+            -input /queries.txt \
+            -results /out/results.csv \
+            -depth "$PROFUNDIDAD" \
+            -lang es \
+            -c 1 \
+            -email \
+            -exit-on-inactivity 3m \
+            > "$WORK/gosom.log" 2>&1
+          codigo=$?
+          set -e
+          docker rm -f gosom-buscar > /dev/null 2>&1 || true
+          echo "$codigo" > "$WORK/codigo_gosom.txt"
+          echo "gosom termino. Codigo de salida: $codigo. Duracion (segundos): $(( $(date +%s) - inicio ))"
+
+      - name: Detectar señales de bloqueo (solo cantidades)
+        run: |
+          etiquetas=('captcha' 'blocked' '429' 'consent' 'unusual traffic')
+          patrones=('captcha' 'blocked' '\b429\b' 'consent' 'unusual traffic')
+          total=0
+          for i in "${!patrones[@]}"; do
+            n=0
+            if [ -f "$WORK/gosom.log" ]; then
+              n=$(grep -oiE "${patrones[$i]}" "$WORK/gosom.log" | wc -l || true)
+            fi
+            echo "Apariciones de '${etiquetas[$i]}' en el log: $n"
+            total=$((total + n))
+          done
+          echo "$total" > "$WORK/palabras_bloqueo.txt"
+
+      # Única etapa con acceso a los secretos de Supabase.
+      - name: Importar a Supabase (solo imprime números)
+        working-directory: scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          RUBRO: ${{ inputs.rubro }}
+        run: |
+          export CSV_RESULTADOS="$WORK/out/results.csv"
+          export PALABRAS_BLOQUEO="$(cat "$WORK/palabras_bloqueo.txt" 2>/dev/null || echo 0)"
+          export CODIGO_GOSOM="$(cat "$WORK/codigo_gosom.txt" 2>/dev/null || true)"
+          node dist/importar.js
+
+      - name: Borrar resultados, queries y logs
+        if: always()
+        run: |
+          docker rm -f gosom-buscar > /dev/null 2>&1 || true
+          sudo rm -rf "$WORK"
+          if [ -e "$WORK" ]; then echo "ATENCION: no se pudo borrar la carpeta de trabajo"; exit 1; fi
+          echo "Carpeta de trabajo borrada (CSV, queries.txt y logs)."
