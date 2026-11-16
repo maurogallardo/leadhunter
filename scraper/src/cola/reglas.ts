@@ -267,33 +267,49 @@ export function construirConsulta(rubro: Rubro, zona: Zona): string {
 // ---------------------------------------------------------------------
 
 /**
- * Señales FUERTES de bloqueo en el log de gosom. "consent" NO está a
- * propósito: da falsas alarmas (avisos de cookies, etc.).
+ * Señales de bloqueo en el log de gosom. "consent" NO está a propósito: da
+ * falsas alarmas (avisos de cookies, etc.).
+ * - fuerte: palabras propias de Google. Siempre son bloqueo.
+ * - debil: "blocked" y "429". Pueden venir de las webs de negocios que gosom
+ *   visita con -email. Solo son bloqueo si la búsqueda trajo 0 filas.
  */
-export const SENALES_FUERTES: readonly { etiqueta: string; patron: RegExp }[] = [
-  { etiqueta: 'captcha', patron: /captcha/gi },
-  { etiqueta: 'blocked', patron: /blocked/gi },
-  { etiqueta: '429', patron: /\b429\b/g },
-  { etiqueta: 'unusual traffic', patron: /unusual traffic/gi },
+export type TipoSenal = 'fuerte' | 'debil';
+
+export const SENALES: readonly { etiqueta: string; tipo: TipoSenal; patron: RegExp }[] = [
+  { etiqueta: 'captcha', tipo: 'fuerte', patron: /captcha/gi },
+  { etiqueta: 'blocked', tipo: 'debil', patron: /blocked/gi },
+  { etiqueta: '429', tipo: 'debil', patron: /\b429\b/g },
+  { etiqueta: 'unusual traffic', tipo: 'fuerte', patron: /unusual traffic/gi },
 ];
 
-/** Cuenta las señales fuertes en el texto del log. Devuelve solo números. */
-export function contarSenalesFuertes(log: string): { etiqueta: string; cantidad: number }[] {
-  return SENALES_FUERTES.map(({ etiqueta, patron }) => ({
+export interface ConteoSenal {
+  etiqueta: string;
+  tipo: TipoSenal;
+  cantidad: number;
+}
+
+/** Cuenta las señales en el texto del log. Devuelve solo números. */
+export function contarSenales(log: string): ConteoSenal[] {
+  return SENALES.map(({ etiqueta, tipo, patron }) => ({
     etiqueta,
+    tipo,
     cantidad: (log.match(new RegExp(patron.source, patron.flags)) ?? []).length,
   }));
 }
 
-export const totalSenales = (conteo: readonly { cantidad: number }[]): number => conteo.reduce((t, c) => t + c.cantidad, 0);
+/** Total de señales; si se indica el tipo, solo las de ese tipo. */
+export const totalSenales = (conteo: readonly ConteoSenal[], tipo?: TipoSenal): number =>
+  conteo.reduce((t, c) => t + (tipo === undefined || c.tipo === tipo ? c.cantidad : 0), 0);
 
 // ---------------------------------------------------------------------
 // Resultado de una búsqueda
 // ---------------------------------------------------------------------
 
 export interface DatosBusqueda {
-  /** Total de señales fuertes en el log de gosom. */
+  /** Señales fuertes en el log de gosom (captcha, unusual traffic). */
   senalesFuertes: number;
+  /** Señales débiles en el log de gosom (blocked, 429). */
+  senalesDebiles: number;
   /** Filas del CSV de gosom. */
   filas: number;
   /** Código de salida de gosom (null = no se pudo ejecutar o lo cortó una señal). */
@@ -308,37 +324,44 @@ export interface DatosBusqueda {
   cerosSeguidosAntes: number;
 }
 
-export type MotivoBloqueo = 'senales_fuertes' | 'dos_sin_resultados';
+export type MotivoBloqueo = 'senales_fuertes' | 'senales_debiles_sin_resultados' | 'dos_sin_resultados';
 
+/**
+ * En "hecha" y "error", senalesDebilesConResultados indica que hubo
+ * "blocked" o "429" en el log pero la búsqueda trajo filas: no es bloqueo,
+ * se cuenta aparte.
+ */
 export type ResultadoBusqueda =
-  | { tipo: 'hecha'; leadsEncontrados: number; cerosSeguidos: number }
-  | { tipo: 'error'; errorMensaje: string; cerosSeguidos: number }
+  | { tipo: 'hecha'; leadsEncontrados: number; cerosSeguidos: number; senalesDebilesConResultados: boolean }
+  | { tipo: 'error'; errorMensaje: string; cerosSeguidos: number; senalesDebilesConResultados: boolean }
   | { tipo: 'bloqueo'; motivo: MotivoBloqueo; cerosSeguidos: number };
 
 /**
  * Decide cómo terminó una búsqueda. Orden:
- * 1. bloqueo por señales fuertes en el log;
- * 2. bloqueo por 2 búsquedas seguidas con 0 resultados (esta y la anterior);
- * 3. error: importación cortada, filas que no se guardaron, o gosom
+ * 1. bloqueo por señales fuertes en el log (captcha, unusual traffic),
+ *    aunque haya filas;
+ * 2. bloqueo por señales débiles (blocked, 429) SOLO si la búsqueda trajo
+ *    0 filas; con filas no es bloqueo (se cuenta aparte);
+ * 3. bloqueo por 2 búsquedas seguidas con 0 resultados (esta y la anterior);
+ * 4. error: importación cortada, filas que no se guardaron, o gosom
  *    terminó con error sin dejar resultados;
- * 4. hecha (aunque tenga 0 resultados, si es la primera con 0).
+ * 5. hecha (aunque tenga 0 resultados, si es la primera con 0).
  * Los mensajes de error son cortos y solo llevan números/códigos.
  */
 export function resultadoDeBusqueda(d: DatosBusqueda): ResultadoBusqueda {
   const cerosSeguidos = d.filas === 0 ? d.cerosSeguidosAntes + 1 : 0;
 
   if (d.senalesFuertes > 0) return { tipo: 'bloqueo', motivo: 'senales_fuertes', cerosSeguidos };
+  if (d.senalesDebiles > 0 && d.filas === 0) return { tipo: 'bloqueo', motivo: 'senales_debiles_sin_resultados', cerosSeguidos };
   if (cerosSeguidos >= CEROS_SEGUIDOS_PARA_BLOQUEO) return { tipo: 'bloqueo', motivo: 'dos_sin_resultados', cerosSeguidos };
 
+  const senalesDebilesConResultados = d.senalesDebiles > 0 && d.filas > 0;
   const codigo = d.codigoError ?? 'desconocido';
-  if (d.importacionFatal) return { tipo: 'error', errorMensaje: `importacion cortada (codigo ${codigo})`, cerosSeguidos };
-  if (d.erroresImportacion > 0) {
-    return { tipo: 'error', errorMensaje: `${d.erroresImportacion} filas no se guardaron (codigo ${codigo})`, cerosSeguidos };
-  }
-  if (d.filas === 0 && d.codigoGosom !== 0) {
-    return { tipo: 'error', errorMensaje: `gosom fallo sin resultados (codigo ${d.codigoGosom ?? 'desconocido'})`, cerosSeguidos };
-  }
-  return { tipo: 'hecha', leadsEncontrados: d.nuevos + d.unidos, cerosSeguidos };
+  const error = (errorMensaje: string): ResultadoBusqueda => ({ tipo: 'error', errorMensaje, cerosSeguidos, senalesDebilesConResultados });
+  if (d.importacionFatal) return error(`importacion cortada (codigo ${codigo})`);
+  if (d.erroresImportacion > 0) return error(`${d.erroresImportacion} filas no se guardaron (codigo ${codigo})`);
+  if (d.filas === 0 && d.codigoGosom !== 0) return error(`gosom fallo sin resultados (codigo ${d.codigoGosom ?? 'desconocido'})`);
+  return { tipo: 'hecha', leadsEncontrados: d.nuevos + d.unidos, cerosSeguidos, senalesDebilesConResultados };
 }
 
 // ---------------------------------------------------------------------
@@ -422,6 +445,8 @@ export interface Totales {
   busquedasConError: number;
   /** Búsquedas devueltas a pendiente por bloqueo (0 o 1). */
   busquedasDevueltas: number;
+  /** Búsquedas con "blocked"/"429" en el log pero con filas (no es bloqueo). */
+  busquedasConSenalesDebiles: number;
   leadsNuevos: number;
   leadsUnidos: number;
 }
@@ -430,6 +455,7 @@ export const totalesIniciales = (): Totales => ({
   busquedasHechas: 0,
   busquedasConError: 0,
   busquedasDevueltas: 0,
+  busquedasConSenalesDebiles: 0,
   leadsNuevos: 0,
   leadsUnidos: 0,
 });
@@ -439,6 +465,7 @@ export function sumarBusqueda(t: Totales, r: ResultadoBusqueda, nuevos: number, 
     busquedasHechas: t.busquedasHechas + (r.tipo === 'hecha' ? 1 : 0),
     busquedasConError: t.busquedasConError + (r.tipo === 'error' ? 1 : 0),
     busquedasDevueltas: t.busquedasDevueltas + (r.tipo === 'bloqueo' ? 1 : 0),
+    busquedasConSenalesDebiles: t.busquedasConSenalesDebiles + (r.tipo !== 'bloqueo' && r.senalesDebilesConResultados ? 1 : 0),
     leadsNuevos: t.leadsNuevos + nuevos,
     leadsUnidos: t.leadsUnidos + unidos,
   };
@@ -452,16 +479,24 @@ export interface DatosResumen {
   relanzar: boolean;
 }
 
+const TEXTO_BLOQUEO: Record<MotivoBloqueo | 'no', string> = {
+  no: 'no',
+  senales_fuertes: 'si (captcha o unusual traffic en el log)',
+  senales_debiles_sin_resultados: 'si (blocked o 429 en el log y 0 resultados)',
+  dos_sin_resultados: 'si (2 busquedas seguidas sin resultados)',
+};
+
 export function lineasResumenCola(d: DatosResumen): string[] {
   return [
     '===== RESUMEN PROCESAR COLA =====',
     `Busquedas hechas: ${d.totales.busquedasHechas}`,
     `Busquedas con error: ${d.totales.busquedasConError}`,
     `Busquedas devueltas a pendiente por bloqueo: ${d.totales.busquedasDevueltas}`,
+    `Busquedas con senales debiles pero con resultados (no es bloqueo): ${d.totales.busquedasConSenalesDebiles}`,
     `Leads nuevos: ${d.totales.leadsNuevos}`,
     `Leads unidos con existentes: ${d.totales.leadsUnidos}`,
     `Pendientes que quedan (incluye errores a reintentar): ${d.quedan ?? 'no se pudo contar'}`,
-    `Bloqueo: ${d.bloqueo === null ? 'no' : d.bloqueo === 'senales_fuertes' ? 'si (senales en el log)' : 'si (2 busquedas seguidas sin resultados)'}`,
+    `Bloqueo: ${TEXTO_BLOQUEO[d.bloqueo ?? 'no']}`,
     `Se relanza sola: ${d.relanzar ? 'si' : 'no'}`,
     `Estado de la corrida: ${d.estado}`,
     '=================================',
@@ -474,6 +509,7 @@ export function detalleCorridaCola(d: DatosResumen & { interrumpidas: number; co
     `hechas=${d.totales.busquedasHechas}`,
     `con_error=${d.totales.busquedasConError}`,
     `devueltas=${d.totales.busquedasDevueltas}`,
+    `senales_debiles_con_resultados=${d.totales.busquedasConSenalesDebiles}`,
     `nuevos=${d.totales.leadsNuevos}`,
     `unidos=${d.totales.leadsUnidos}`,
     `quedan=${d.quedan ?? 'desconocido'}`,

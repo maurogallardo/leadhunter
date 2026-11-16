@@ -31,7 +31,7 @@ import {
   cambioAlTerminar,
   cambioAlTomar,
   construirConsulta,
-  contarSenalesFuertes,
+  contarSenales,
   type DatosResumen,
   debeRelanzar,
   detalleCorridaCola,
@@ -135,13 +135,14 @@ async function principal(): Promise<number> {
     } catch {
       log = '';
     }
-    const senales = contarSenalesFuertes(log);
+    const senales = contarSenales(log);
     log = '';
 
     const importacion = await importarCsv(db, archivos.csv, tarea.rubro.id);
     const c = importacion.contadores;
     const r = resultadoDeBusqueda({
-      senalesFuertes: totalSenales(senales),
+      senalesFuertes: totalSenales(senales, 'fuerte'),
+      senalesDebiles: totalSenales(senales, 'debil'),
       filas: c.filasLeidas,
       codigoGosom,
       importacionFatal: importacion.fatal,
@@ -166,7 +167,7 @@ async function principal(): Promise<number> {
       `Busqueda ${busquedas} (de ${tareas.length} al empezar): ${r.tipo} | filas ${c.filasLeidas} | nuevos ${c.nuevos} | unidos ${c.unidos} | codigo gosom ${codigoGosom ?? 'desconocido'} | segundos ${duracion}`,
     );
     if (totalSenales(senales) > 0) {
-      console.log(`  Senales fuertes en el log: ${senales.map((s) => `${s.etiqueta}=${s.cantidad}`).join(', ')}`);
+      console.log(`  Senales en el log: ${senales.map((s) => `${s.etiqueta}=${s.cantidad}`).join(', ')}`);
     }
 
     try {

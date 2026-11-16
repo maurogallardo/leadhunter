@@ -42,9 +42,17 @@ Correrlo dos veces no repite nada. Imprime: zonas activas, rubros activos, pendi
 - Marca el pendiente como `hecha` (con `leads_encontrados`) o `error` (con un mensaje corto).
   Un pendiente con error se reintenta en corridas siguientes hasta 3 intentos en total.
 - Pausa al azar de 20 a 60 segundos entre búsquedas. No tiene tope de búsquedas.
-- **Bloqueo de Google** (captcha, blocked, 429 o unusual traffic en el log de gosom, o dos búsquedas
-  seguidas sin resultados): frena todo, la corrida queda `frenada_por_bloqueo` y la búsqueda en curso
-  vuelve a `pendiente`. No sigue hasta que se lance de nuevo a mano.
+- **Bloqueo de Google.** Se considera bloqueo cuando pasa cualquiera de estas cosas:
+  - "captcha" o "unusual traffic" en el log de gosom (palabras propias de Google), siempre,
+    aunque la búsqueda haya traído resultados;
+  - "blocked" o "429" en el log, **solo si esa búsqueda trajo 0 resultados**. Si trajo resultados no
+    es bloqueo (suelen venir de las webs de negocios que gosom visita para buscar mails): se cuenta
+    aparte y el resumen lo muestra en "Busquedas con senales debiles pero con resultados (no es bloqueo)";
+  - dos búsquedas seguidas sin resultados.
+
+  "consent" no cuenta, y "4290" no cuenta como 429. Con bloqueo, frena todo: la corrida queda
+  `frenada_por_bloqueo` y la búsqueda en curso vuelve a `pendiente` sin gastar un intento.
+  No sigue hasta que se lance de nuevo a mano.
 - **Límite de 6 horas de GitHub:** a los 315 minutos (input `minutos_antes_de_relanzar`) deja de empezar
   búsquedas y, si quedan pendientes y no hubo bloqueo, se relanza sola.
   Si el relanzamiento falla por permisos, revisar en GitHub

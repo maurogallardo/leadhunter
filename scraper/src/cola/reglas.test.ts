@@ -5,7 +5,7 @@ import {
   cambioAlTerminar,
   cambioAlTomar,
   construirConsulta,
-  contarSenalesFuertes,
+  contarSenales,
   type DatosBusqueda,
   debeRelanzar,
   esElegible,
@@ -183,7 +183,7 @@ describe('reintentos (máximo 3 intentos en total)', () => {
 
   it('ciclo completo: 3 errores seguidos y queda en error para siempre', () => {
     let p = pendiente('p', 'r', 'z');
-    const error = { tipo: 'error', errorMensaje: 'x', cerosSeguidos: 0 } as const;
+    const error = { tipo: 'error', errorMensaje: 'x', cerosSeguidos: 0, senalesDebilesConResultados: false } as const;
     for (let intento = 1; intento <= 3; intento++) {
       expect(esElegible(p)).toBe(true);
       const tomado = cambioAlTomar(p, 'T');
@@ -204,7 +204,7 @@ describe('reintentos (máximo 3 intentos en total)', () => {
   });
 
   it('hecha: guarda leads_encontrados y limpia el error', () => {
-    const cambio = cambioAlTerminar(pendiente('p', 'r', 'z'), { tipo: 'hecha', leadsEncontrados: 12, cerosSeguidos: 0 }, 'T');
+    const cambio = cambioAlTerminar(pendiente('p', 'r', 'z'), { tipo: 'hecha', leadsEncontrados: 12, cerosSeguidos: 0, senalesDebilesConResultados: false }, 'T');
     expect(cambio).toEqual({ estado: 'hecha', leads_encontrados: 12, error_mensaje: null, terminada_en: 'T' });
   });
 });
@@ -239,26 +239,29 @@ describe('construirConsulta', () => {
 });
 
 describe('bloqueo', () => {
-  it('cuenta solo señales fuertes; "consent" NO cuenta; 4290 no es 429', () => {
+  it('cuenta señales fuertes y débiles por separado; "consent" NO cuenta; 4290 no es 429', () => {
     const log = 'Captcha detectado\nrequest BLOCKED\nstatus 429\nid 4290\nconsent.google.com\nUnusual Traffic\ncaptcha otra vez';
-    const conteo = contarSenalesFuertes(log);
+    const conteo = contarSenales(log);
     expect(conteo).toEqual([
-      { etiqueta: 'captcha', cantidad: 2 },
-      { etiqueta: 'blocked', cantidad: 1 },
-      { etiqueta: '429', cantidad: 1 },
-      { etiqueta: 'unusual traffic', cantidad: 1 },
+      { etiqueta: 'captcha', tipo: 'fuerte', cantidad: 2 },
+      { etiqueta: 'blocked', tipo: 'debil', cantidad: 1 },
+      { etiqueta: '429', tipo: 'debil', cantidad: 1 },
+      { etiqueta: 'unusual traffic', tipo: 'fuerte', cantidad: 1 },
     ]);
     expect(totalSenales(conteo)).toBe(5);
-    expect(totalSenales(contarSenalesFuertes('consent consent consent'))).toBe(0);
-    expect(totalSenales(contarSenalesFuertes(''))).toBe(0);
+    expect(totalSenales(conteo, 'fuerte')).toBe(3);
+    expect(totalSenales(conteo, 'debil')).toBe(2);
+    expect(totalSenales(contarSenales('consent consent consent'))).toBe(0);
+    expect(totalSenales(contarSenales(''))).toBe(0);
   });
 
   it('contar dos veces da lo mismo (sin estado escondido en las expresiones)', () => {
-    expect(contarSenalesFuertes('captcha')).toEqual(contarSenalesFuertes('captcha'));
+    expect(contarSenales('captcha')).toEqual(contarSenales('captcha'));
   });
 
   const base: DatosBusqueda = {
     senalesFuertes: 0,
+    senalesDebiles: 0,
     filas: 20,
     codigoGosom: 0,
     importacionFatal: false,
@@ -270,7 +273,7 @@ describe('bloqueo', () => {
   };
 
   it('normal -> hecha con nuevos + unidos', () => {
-    expect(resultadoDeBusqueda(base)).toEqual({ tipo: 'hecha', leadsEncontrados: 20, cerosSeguidos: 0 });
+    expect(resultadoDeBusqueda(base)).toEqual({ tipo: 'hecha', leadsEncontrados: 20, cerosSeguidos: 0, senalesDebilesConResultados: false });
   });
 
   it('señales fuertes -> bloqueo aunque haya filas', () => {
@@ -280,7 +283,7 @@ describe('bloqueo', () => {
   it('primera con 0 resultados -> hecha con 0; segunda seguida -> bloqueo', () => {
     const cero = { ...base, filas: 0, nuevos: 0, unidos: 0 };
     const primera = resultadoDeBusqueda(cero);
-    expect(primera).toEqual({ tipo: 'hecha', leadsEncontrados: 0, cerosSeguidos: 1 });
+    expect(primera).toEqual({ tipo: 'hecha', leadsEncontrados: 0, cerosSeguidos: 1, senalesDebilesConResultados: false });
     const segunda = resultadoDeBusqueda({ ...cero, cerosSeguidosAntes: primera.cerosSeguidos });
     expect(segunda).toEqual({ tipo: 'bloqueo', motivo: 'dos_sin_resultados', cerosSeguidos: 2 });
   });
@@ -292,7 +295,7 @@ describe('bloqueo', () => {
 
   it('gosom falló sin resultados -> error (y cuenta como cero); el segundo cero seguido es bloqueo', () => {
     const fallo = { ...base, filas: 0, nuevos: 0, unidos: 0, codigoGosom: 124 };
-    expect(resultadoDeBusqueda(fallo)).toEqual({ tipo: 'error', errorMensaje: 'gosom fallo sin resultados (codigo 124)', cerosSeguidos: 1 });
+    expect(resultadoDeBusqueda(fallo)).toEqual({ tipo: 'error', errorMensaje: 'gosom fallo sin resultados (codigo 124)', cerosSeguidos: 1, senalesDebilesConResultados: false });
     expect(resultadoDeBusqueda({ ...fallo, cerosSeguidosAntes: 1 })).toMatchObject({ tipo: 'bloqueo' });
     expect(resultadoDeBusqueda({ ...fallo, codigoGosom: null })).toMatchObject({ errorMensaje: 'gosom fallo sin resultados (codigo desconocido)' });
   });
@@ -310,6 +313,100 @@ describe('bloqueo', () => {
       tipo: 'error',
       errorMensaje: '2 filas no se guardaron (codigo 23505)',
     });
+  });
+});
+
+describe('regla de bloqueo: señales fuertes siempre, débiles solo con 0 filas', () => {
+  // Del texto (inventado) del log a la decisión, igual que en procesar-cola.ts.
+  const decidirConLog = (log: string, filas: number, cerosSeguidosAntes = 0) => {
+    const conteo = contarSenales(log);
+    return resultadoDeBusqueda({
+      senalesFuertes: totalSenales(conteo, 'fuerte'),
+      senalesDebiles: totalSenales(conteo, 'debil'),
+      filas,
+      codigoGosom: 0,
+      importacionFatal: false,
+      erroresImportacion: 0,
+      codigoError: null,
+      nuevos: filas,
+      unidos: 0,
+      cerosSeguidosAntes,
+    });
+  };
+
+  it('captcha con filas = bloqueo', () => {
+    expect(decidirConLog('pagina con captcha', 70)).toMatchObject({ tipo: 'bloqueo', motivo: 'senales_fuertes' });
+  });
+
+  it('unusual traffic con filas = bloqueo', () => {
+    expect(decidirConLog('Our systems have detected unusual traffic', 70)).toMatchObject({ tipo: 'bloqueo', motivo: 'senales_fuertes' });
+  });
+
+  it('429 con filas = NO bloqueo (el caso de la primera corrida real: 70 filas, 429=12)', () => {
+    const log = Array.from({ length: 12 }, (_, i) => `web-ficticia-${i}.test respondio 429`).join('\n');
+    expect(decidirConLog(log, 70)).toEqual({ tipo: 'hecha', leadsEncontrados: 70, cerosSeguidos: 0, senalesDebilesConResultados: true });
+  });
+
+  it('429 con 0 filas = bloqueo', () => {
+    expect(decidirConLog('status 429', 0)).toMatchObject({ tipo: 'bloqueo', motivo: 'senales_debiles_sin_resultados' });
+  });
+
+  it('blocked con filas = NO bloqueo', () => {
+    expect(decidirConLog('request blocked by web-ficticia.test', 5)).toMatchObject({ tipo: 'hecha', senalesDebilesConResultados: true });
+  });
+
+  it('blocked con 0 filas = bloqueo', () => {
+    expect(decidirConLog('request blocked', 0)).toMatchObject({ tipo: 'bloqueo', motivo: 'senales_debiles_sin_resultados' });
+  });
+
+  it('dos búsquedas seguidas con 0 (sin señales) = bloqueo', () => {
+    const primera = decidirConLog('', 0);
+    expect(primera).toMatchObject({ tipo: 'hecha', cerosSeguidos: 1 });
+    expect(decidirConLog('', 0, primera.cerosSeguidos)).toMatchObject({ tipo: 'bloqueo', motivo: 'dos_sin_resultados' });
+  });
+
+  it('"consent" sola no cuenta, ni con 0 filas', () => {
+    expect(decidirConLog('consent.google.com consent', 10)).toMatchObject({ tipo: 'hecha', senalesDebilesConResultados: false });
+    expect(decidirConLog('consent.google.com', 0)).toMatchObject({ tipo: 'hecha', cerosSeguidos: 1 });
+  });
+
+  it('"4290" no cuenta como 429, ni con 0 filas', () => {
+    expect(decidirConLog('id 4290', 10)).toMatchObject({ tipo: 'hecha', senalesDebilesConResultados: false });
+    expect(decidirConLog('id 4290', 0)).toMatchObject({ tipo: 'hecha', cerosSeguidos: 1 });
+  });
+
+  it('captcha más 429 con filas: gana el bloqueo y no se cuenta como señal débil', () => {
+    const r = decidirConLog('captcha y 429', 30);
+    expect(r).toMatchObject({ tipo: 'bloqueo', motivo: 'senales_fuertes' });
+    expect(sumarBusqueda(totalesIniciales(), r, 30, 0).busquedasConSenalesDebiles).toBe(0);
+  });
+
+  it('señal débil con filas pero error al guardar: queda en error y se cuenta como señal débil', () => {
+    const r = resultadoDeBusqueda({
+      senalesFuertes: 0,
+      senalesDebiles: 3,
+      filas: 10,
+      codigoGosom: 0,
+      importacionFatal: false,
+      erroresImportacion: 1,
+      codigoError: '23505',
+      nuevos: 9,
+      unidos: 0,
+      cerosSeguidosAntes: 0,
+    });
+    expect(r).toMatchObject({ tipo: 'error', senalesDebilesConResultados: true });
+    expect(sumarBusqueda(totalesIniciales(), r, 9, 0).busquedasConSenalesDebiles).toBe(1);
+  });
+
+  it('el resumen nombra el motivo del bloqueo por señales débiles', () => {
+    const lineas = lineasResumenCola({
+      totales: totalesIniciales(),
+      quedan: 1,
+      estado: 'frenada_por_bloqueo',
+      bloqueo: 'senales_debiles_sin_resultados',
+      relanzar: false,
+    });
+    expect(lineas).toContain('Bloqueo: si (blocked o 429 en el log y 0 resultados)');
   });
 });
 
@@ -356,14 +453,23 @@ describe('tiempo y relanzamiento', () => {
 describe('totales y resumen', () => {
   it('suma por tipo y el resumen solo tiene números y estados', () => {
     let t = totalesIniciales();
-    t = sumarBusqueda(t, { tipo: 'hecha', leadsEncontrados: 3, cerosSeguidos: 0 }, 2, 1);
-    t = sumarBusqueda(t, { tipo: 'error', errorMensaje: 'x', cerosSeguidos: 0 }, 0, 0);
+    t = sumarBusqueda(t, { tipo: 'hecha', leadsEncontrados: 3, cerosSeguidos: 0, senalesDebilesConResultados: true }, 2, 1);
+    t = sumarBusqueda(t, { tipo: 'error', errorMensaje: 'x', cerosSeguidos: 0, senalesDebilesConResultados: false }, 0, 0);
     t = sumarBusqueda(t, { tipo: 'bloqueo', motivo: 'dos_sin_resultados', cerosSeguidos: 2 }, 0, 0);
-    expect(t).toEqual({ busquedasHechas: 1, busquedasConError: 1, busquedasDevueltas: 1, leadsNuevos: 2, leadsUnidos: 1 });
+    expect(t).toEqual({
+      busquedasHechas: 1,
+      busquedasConError: 1,
+      busquedasDevueltas: 1,
+      busquedasConSenalesDebiles: 1,
+      leadsNuevos: 2,
+      leadsUnidos: 1,
+    });
 
     const lineas = lineasResumenCola({ totales: t, quedan: 5, estado: 'frenada_por_bloqueo', bloqueo: 'dos_sin_resultados', relanzar: false });
     expect(lineas).toContain('Busquedas hechas: 1');
     expect(lineas).toContain('Busquedas con error: 1');
+    expect(lineas).toContain('Busquedas con senales debiles pero con resultados (no es bloqueo): 1');
+    expect(lineas).toContain('Bloqueo: si (2 busquedas seguidas sin resultados)');
     expect(lineas).toContain('Leads nuevos: 2');
     expect(lineas).toContain('Leads unidos con existentes: 1');
     expect(lineas).toContain('Pendientes que quedan (incluye errores a reintentar): 5');
