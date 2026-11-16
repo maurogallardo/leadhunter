@@ -1,0 +1,111 @@
+name: Procesar cola
+
+# Solo se lanza a mano: GitHub -> Actions -> "Procesar cola" -> Run workflow.
+# (La única excepción: se relanza sola cuando se acerca al límite de 6 horas
+# de GitHub y todavía quedan pendientes.)
+# Toma los pendientes de cola_busquedas de a uno, corre gosom, importa a
+# Supabase con el mismo importador que "Buscar" y marca cada pendiente.
+# Nunca muestra datos de negocios en el log: solo números y estados.
+on:
+  workflow_dispatch:
+    inputs:
+      minutos_antes_de_relanzar:
+        description: 'Minutos de corrida antes de relanzarse sola (1 a 315). Dejá 315; un valor chico (ej. 5) sirve para probar el relanzamiento.'
+        required: false
+        type: number
+        default: 315
+
+permissions:
+  contents: read
+  # Para poder relanzarse con "gh workflow run".
+  actions: write
+
+# Una sola corrida de cola a la vez. Las demás esperan en fila (no se cancelan).
+concurrency:
+  group: leadhunter-procesar-cola
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  procesar:
+    runs-on: ubuntu-latest
+    # GitHub corta a las 6 horas (360). La corrida deja de empezar búsquedas a
+    # los 315 minutos; cada búsqueda dura como máximo 30 minutos de gosom.
+    timeout-minutes: 350
+    env:
+      # Versión FIJA de la imagen oficial (no "latest"), igual que en buscar.yml.
+      GOSOM_IMAGE: gosom/google-maps-scraper:v1.19.0
+      # Carpeta de trabajo fuera del repo. Nada de esto se sube.
+      WORK: /tmp/leadhunter-cola
+      MINUTOS_MAXIMOS: '315'
+    steps:
+      # El dato de entrada se pasa por variable de entorno y se usa entre
+      # comillas: nunca se pega dentro del script (evita inyección).
+      - name: Anotar hora de inicio y validar datos de entrada
+        env:
+          MINUTOS: ${{ inputs.minutos_antes_de_relanzar }}
+        run: |
+          set -euo pipefail
+          echo "INICIO_JOB=$(date +%s)" >> "$GITHUB_ENV"
+          MINUTOS="${MINUTOS:-315}"
+          if ! [[ "$MINUTOS" =~ ^[0-9]+$ ]] || [ "$MINUTOS" -lt 1 ] || [ "$MINUTOS" -gt "$MINUTOS_MAXIMOS" ]; then
+            echo "ERROR: minutos_antes_de_relanzar tiene que ser un numero entero de 1 a $MINUTOS_MAXIMOS."
+            exit 1
+          fi
+          echo "MINUTOS_ANTES_DE_RELANZAR=$MINUTOS" >> "$GITHUB_ENV"
+          mkdir -p "$WORK"
+          echo "Datos de entrada OK. Minutos antes de relanzar: $MINUTOS"
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Instalar Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26
+
+      - name: Instalar dependencias y compilar
+        working-directory: scraper
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+
+      - name: Descargar imagen de gosom
+        run: docker pull --quiet "$GOSOM_IMAGE"
+
+      # Única etapa con acceso a los secretos de Supabase.
+      # Docker (gosom) NO recibe los secretos.
+      - name: Procesar cola (solo imprime números)
+        working-directory: scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: |
+          export CARPETA_TRABAJO="$WORK"
+          node dist/procesar-cola.js
+
+      # Solo si el paso anterior terminó bien y dejó escrito "si".
+      - name: Relanzar si quedan pendientes y se llegó al límite de tiempo
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$(cat "$WORK/relanzar.txt" 2>/dev/null || true)" = "si" ]; then
+            if gh workflow run procesar-cola.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME"; then
+              echo "Se lanzo una nueva corrida de Procesar cola."
+            else
+              echo "ERROR: no se pudo relanzar. Revisar Settings > Actions > General > Workflow permissions."
+              exit 1
+            fi
+          else
+            echo "No hace falta relanzar."
+          fi
+
+      - name: Borrar resultados, queries y logs
+        if: always()
+        run: |
+          docker rm -f gosom-cola > /dev/null 2>&1 || true
+          sudo rm -rf "$WORK"
+          if [ -e "$WORK" ]; then echo "ATENCION: no se pudo borrar la carpeta de trabajo"; exit 1; fi
+          echo "Carpeta de trabajo borrada (CSV, queries.txt y logs)."

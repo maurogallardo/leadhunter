@@ -1,0 +1,46 @@
+name: Armar cola
+
+# Solo se lanza a mano: GitHub -> Actions -> "Armar cola" -> Run workflow.
+# Crea un pendiente en cola_busquedas por cada rubro activo × zona activa
+# que todavía no exista. Correrlo dos veces no repite nada.
+# Solo imprime números. No baja ni guarda archivos.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Si se lanza varias veces, las corridas esperan en fila (no se cancelan).
+concurrency:
+  group: leadhunter-armar-cola
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  armar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Instalar Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26
+
+      - name: Instalar dependencias y compilar
+        working-directory: scraper
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+
+      # Única etapa con acceso a los secretos de Supabase.
+      - name: Armar cola (solo imprime números)
+        working-directory: scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: node dist/armar-cola.js
