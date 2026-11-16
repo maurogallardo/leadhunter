@@ -12,34 +12,16 @@
 // teléfonos, mails, direcciones, claves ni mensajes de error crudos
 // (pueden traer datos de la fila): solo códigos de error.
 
-import { existsSync, readFileSync } from 'node:fs';
-import {
-  actualizarLead,
-  buscarCandidatos,
-  buscarRubroActivo,
-  cerrarCorrida,
-  crearCliente,
-  crearCorrida,
-  insertarLead,
-} from './importacion/base.js';
+import { buscarRubroActivo, cerrarCorrida, crearCliente, crearCorrida } from './importacion/base.js';
 import { leerConfiguracion } from './importacion/configuracion.js';
-import { leerFilasCsv } from './importacion/csv.js';
 import {
   codigoDeErrorSeguro,
-  contadoresIniciales,
-  contarDecision,
-  decidir,
   detalleTecnico,
   estadoDeCorrida,
   hayBloqueo,
-  leadAFila,
-  leadAFilaActualizacion,
   lineasDeResumen,
 } from './importacion/decision.js';
-import { FUENTE_GOSOM, mapearFilaGosom } from './limpieza/gosom.js';
-
-/** Si fallan tantas filas seguidas, se corta (probablemente la base no responde). */
-const MAXIMO_ERRORES_SEGUIDOS = 5;
+import { importarCsv } from './importacion/importar-csv.js';
 
 async function principal(): Promise<number> {
   const resultado = leerConfiguracion(process.env);
@@ -72,51 +54,8 @@ async function principal(): Promise<number> {
     return 1;
   }
 
-  // 3. Procesar el CSV
-  let contadores = contadoresIniciales();
-  let fatal = false;
-  let codigoError: string | null = null;
-  let erroresSeguidos = 0;
-
-  try {
-    const texto = existsSync(config.rutaCsv) ? readFileSync(config.rutaCsv, 'utf8') : '';
-    const filas = leerFilasCsv(texto);
-
-    for (const fila of filas) {
-      contadores = { ...contadores, filasLeidas: contadores.filasLeidas + 1 };
-
-      const lead = mapearFilaGosom(fila);
-      if (!lead) {
-        contadores = { ...contadores, filasSinNombre: contadores.filasSinNombre + 1 };
-        continue;
-      }
-      lead.rubro_id = rubroId;
-      lead.fuentes = { ...lead.fuentes, rubro_id: [FUENTE_GOSOM] };
-
-      try {
-        const candidatos = await buscarCandidatos(db, lead);
-        const decision = decidir(lead, candidatos);
-        if (decision.accion === 'insertar') {
-          await insertarLead(db, leadAFila(decision.lead));
-        } else {
-          await actualizarLead(db, decision.id, leadAFilaActualizacion(decision.lead, decision.reactivado));
-        }
-        contadores = contarDecision(contadores, decision);
-        erroresSeguidos = 0;
-      } catch (error) {
-        contadores = { ...contadores, errores: contadores.errores + 1 };
-        codigoError = codigoDeErrorSeguro(error);
-        erroresSeguidos++;
-        if (erroresSeguidos >= MAXIMO_ERRORES_SEGUIDOS) {
-          fatal = true;
-          break;
-        }
-      }
-    }
-  } catch (error) {
-    fatal = true;
-    codigoError = codigoDeErrorSeguro(error);
-  }
+  // 3. Procesar el CSV (mismo núcleo que usa la cola)
+  const { contadores, fatal, codigoError } = await importarCsv(db, config.rutaCsv, rubroId);
 
   // 4. Cerrar la corrida
   const bloqueo = hayBloqueo(config.palabrasDeBloqueo, contadores.filasLeidas);

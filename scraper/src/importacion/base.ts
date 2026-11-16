@@ -39,6 +39,8 @@ export interface CierreCorrida {
   leadsNuevos: number;
   bloqueoDetectado: boolean;
   detalle: string;
+  /** Cantidad de búsquedas de la corrida. "Buscar" hace siempre 1. */
+  busquedasHechas?: number;
 }
 
 export async function cerrarCorrida(db: SupabaseClient, id: string, cierre: CierreCorrida): Promise<void> {
@@ -47,7 +49,7 @@ export async function cerrarCorrida(db: SupabaseClient, id: string, cierre: Cier
     .update({
       terminada_en: new Date().toISOString(),
       estado: cierre.estado,
-      busquedas_hechas: 1,
+      busquedas_hechas: cierre.busquedasHechas ?? 1,
       leads_nuevos: cierre.leadsNuevos,
       bloqueo_detectado: cierre.bloqueoDetectado,
       detalle: cierre.detalle,
