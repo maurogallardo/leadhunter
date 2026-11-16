@@ -1,0 +1,128 @@
+name: Prueba Google
+
+# Solo se lanza a mano desde GitHub -> Actions -> "Prueba Google" -> Run workflow.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prueba:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Versión FIJA de la imagen oficial (no "latest").
+      GOSOM_IMAGE: gosom/google-maps-scraper:v1.19.0
+      # Carpeta de trabajo fuera del repo. Nada de esto se sube.
+      WORK: /tmp/leadhunter-prueba
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Crear queries.txt
+        run: |
+          mkdir -p "$WORK/out"
+          printf '%s\n' "distribuidoras de alimentos en Córdoba, Argentina" > "$WORK/queries.txt"
+          echo "queries.txt creado con $(wc -l < "$WORK/queries.txt") busqueda(s)"
+
+      - name: Descargar imagen de gosom
+        run: docker pull --quiet "$GOSOM_IMAGE"
+
+      - name: Correr gosom (salida a archivo, no se muestra)
+        run: |
+          inicio=$(date +%s)
+          set +e
+          docker run --rm \
+            -e DISABLE_TELEMETRY=1 \
+            -v "$WORK/queries.txt:/queries.txt:ro" \
+            -v "$WORK/out:/out" \
+            "$GOSOM_IMAGE" \
+            -input /queries.txt \
+            -results /out/results.csv \
+            -depth 1 \
+            -lang es \
+            -c 1 \
+            -exit-on-inactivity 3m \
+            > "$WORK/gosom.log" 2>&1
+          codigo=$?
+          set -e
+          fin=$(date +%s)
+          echo "$codigo" > "$WORK/exit_code.txt"
+          echo $((fin - inicio)) > "$WORK/duracion.txt"
+          echo "gosom termino. Codigo de salida: $codigo"
+
+      - name: Resumen (solo numeros y estados)
+        run: |
+          python3 - <<'PY'
+          import csv, os, re, sys
+          csv.field_size_limit(sys.maxsize)
+          work = os.environ["WORK"]
+          ruta_csv = os.path.join(work, "out", "results.csv")
+          ruta_log = os.path.join(work, "gosom.log")
+
+          def leer(nombre, defecto="?"):
+              try:
+                  with open(os.path.join(work, nombre)) as f:
+                      return f.read().strip()
+              except OSError:
+                  return defecto
+
+          filas = tel = web = rating = 0
+          csv_existe = os.path.exists(ruta_csv)
+          if csv_existe:
+              with open(ruta_csv, newline="", encoding="utf-8", errors="replace") as f:
+                  for fila in csv.DictReader(f):
+                      filas += 1
+                      if (fila.get("phone") or "").strip():
+                          tel += 1
+                      if (fila.get("website") or "").strip():
+                          web += 1
+                      try:
+                          if float((fila.get("review_rating") or "0").strip() or 0) > 0:
+                              rating += 1
+                      except ValueError:
+                          pass
+
+          palabras = {
+              "captcha": r"captcha",
+              "blocked": r"blocked",
+              "429": r"\b429\b",
+              "consent": r"consent",
+              "unusual traffic": r"unusual traffic",
+          }
+          conteo = {k: 0 for k in palabras}
+          if os.path.exists(ruta_log):
+              with open(ruta_log, encoding="utf-8", errors="replace") as f:
+                  texto = f.read()
+              for k, patron in palabras.items():
+                  conteo[k] = len(re.findall(patron, texto, flags=re.IGNORECASE))
+          total_bloqueo = sum(conteo.values())
+
+          print("===== RESUMEN PRUEBA GOOGLE =====")
+          print(f"Imagen: {os.environ['GOSOM_IMAGE']}")
+          print(f"Codigo de salida gosom: {leer('exit_code.txt')}")
+          print(f"Duracion (segundos): {leer('duracion.txt')}")
+          print(f"CSV generado: {'si' if csv_existe else 'no'}")
+          print(f"Filas: {filas}")
+          print(f"Con telefono: {tel}")
+          print(f"Con sitio web: {web}")
+          print(f"Con rating: {rating}")
+          print(f"Log existe: {'si' if os.path.exists(ruta_log) else 'no'}")
+          for k, v in conteo.items():
+              print(f"Apariciones de '{k}' en el log: {v}")
+          if filas == 0 or total_bloqueo > 0:
+              print("RESULTADO: BLOQUEO PROBABLE")
+          else:
+              print("RESULTADO: SIN SEÑALES DE BLOQUEO")
+          print("=================================")
+          PY
+
+      - name: Borrar resultados, queries y logs
+        if: always()
+        run: |
+          sudo rm -rf "$WORK"
+          if [ -e "$WORK" ]; then echo "ATENCION: no se pudo borrar la carpeta de trabajo"; exit 1; fi
+          echo "Carpeta de trabajo borrada (CSV, queries.txt y logs)."

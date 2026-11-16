@@ -1,0 +1,23 @@
+# Claves y configuración local
+.env
+.env.*
+*.key
+*.pem
+secrets/
+credentials*.json
+
+# Resultados y datos de leads (NUNCA al repo)
+*.csv
+*.json.out
+*.jsonl
+*.xlsx
+*.xls
+results/
+gmaps-output/
+queries.txt
+
+# Logs
+*.log
+
+# Dependencias
+node_modules/
