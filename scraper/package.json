@@ -2,18 +2,25 @@
   "name": "leadhunter-scraper",
   "version": "0.1.0",
   "private": true,
-  "description": "Lógica de limpieza de datos de LeadHunter (funciones puras, sin red).",
+  "description": "Limpieza e importación de leads de LeadHunter.",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.build.json",
+    "importar": "node dist/importar.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.119.0",
+    "csv-parse": "^7.0.3",
     "libphonenumber-js": "^1.13.16"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
