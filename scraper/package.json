@@ -1,0 +1,19 @@
+{
+  "name": "leadhunter-scraper",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lógica de limpieza de datos de LeadHunter (funciones puras, sin red).",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "libphonenumber-js": "^1.13.16"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}
