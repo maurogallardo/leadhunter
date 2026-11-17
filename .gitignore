@@ -8,6 +8,8 @@ credentials*.json
 
 # Resultados y datos de leads (NUNCA al repo)
 *.csv
+# Única excepción: copia fija del Censo 2022 (INDEC, datos públicos, solo códigos y números).
+!scraper/datos/censo2022_gobierno_local.csv
 *.json.out
 *.jsonl
 *.xlsx

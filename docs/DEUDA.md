@@ -5,16 +5,21 @@ Cuando un tema se resuelve, se cambia su estado a "cerrado" con la fecha.
 
 | # | Tema | Riesgo | Fecha | Estado |
 |---|------|--------|-------|--------|
-| 1 | Localidades mal guardadas | medio | 2026-11-16 | abierto |
+| 1 | Localidades mal guardadas | medio | 2026-11-16 | cerrado (2026-11-17) |
 | 2 | Sin copias automáticas en el plan Free de Supabase | medio | 2026-11-16 | abierto |
 | 3 | Claves y contraseñas a renovar | medio | 2026-11-16 | abierto |
 | 4 | Bloqueo de Google y relanzamiento sin verificar en un caso real | medio | 2026-11-16 | abierto |
+| 11 | La regla de "dos búsquedas seguidas sin resultados" frena la cola en pueblos chicos | medio | 2026-11-16 | abierto |
 | 5 | Workflows programados de GitHub pueden retrasarse o desactivarse | bajo | 2026-11-16 | abierto |
 | 6 | Faltan zonas de Córdoba fuera de la capital | bajo | 2026-11-16 | abierto |
 | 7 | Unos 70 resultados como máximo por búsqueda | bajo | 2026-11-16 | abierto |
 | 8 | Datos de baja calidad | bajo | 2026-11-16 | abierto |
 | 9 | Etapas 6b y 6c: exportación diaria y descarga automática | bajo | 2026-11-16 | abierto |
 | 10 | Etapas futuras (7 a 10) | bajo | 2026-11-16 | abierto |
+| 12 | 7 localidades censales con nombre repetido no se cargan como zona | bajo | 2026-11-16 | abierto |
+| 13 | Copia fija del censo 2022 en el repo; reemplazar a mano si INDEC publica una corrección | bajo | 2026-11-17 | abierto |
+| 14 | Localidad "Paraje" en el panel: revisar si es un nombre real o un resto de antes de la regla nueva | bajo | 2026-11-17 | abierto |
+| 15 | docs/DECISIONES.md no existe aunque la constitución manda leerlo | bajo | 2026-11-17 | abierto |
 
 ---
 
@@ -27,7 +32,13 @@ Cuando un tema se resuelve, se cambia su estado a "cerrado" con la fecha.
 - **Qué hay que hacer:** corregir la regla y reparar los leads ya guardados, exportando antes la tabla.
 - **Riesgo:** medio.
 - **Fecha:** 2026-11-16.
-- **Estado:** abierto.
+- **Estado:** cerrado (2026-11-17).
+- **Verificación (2026-11-17):** lista oficial cargada con "Cargar localidades oficiales" (1046 guardadas); reparación aplicada con "Reparar localidades" (30 actualizadas, errores 0); Mauro revisó el desplegable de Localidad del panel desde el celular: sin códigos.
+- **Avance (2026-11-17):**
+  - La causa real no es una regla nuestra sobre la dirección: gosom toma la localidad ("city") de una posición fija de los datos de Google, que a veces trae el código postal.
+  - Regla nueva en el scraper (commits f143dbb y adc5935 en main).
+  - En la rama `prueba/localidades`: validación contra la lista oficial (Georef / INDEC, tabla `localidades_oficiales`) y el workflow "Reparar localidades".
+  - Se cierra recién cuando la reparación esté aplicada y verificada (vista previa, aplicar y filtro del panel sin códigos).
 
 ### 2. Sin copias automáticas en el plan Free de Supabase
 
@@ -56,6 +67,15 @@ Cuando un tema se resuelve, se cambia su estado a "cerrado" con la fecha.
 - **Fecha:** 2026-11-16.
 - **Estado:** abierto.
 
+### 11. La regla de "dos búsquedas seguidas sin resultados" frena la cola en pueblos chicos
+
+- **Qué es:** "Procesar cola" toma como bloqueo de Google dos búsquedas seguidas con 0 resultados. En localidades chicas es normal que varios rubros den 0 resultados seguidos.
+- **Por qué importa:** con las zonas de toda Córdoba, la cola se frenaría seguido sin que haya bloqueo real, y cada vez hay que relanzarla a mano.
+- **Qué hay que hacer:** decidir cómo tratar esa regla ANTES de activar zonas chicas (las zonas de Córdoba se cargan desactivadas y se activan por tandas).
+- **Riesgo:** medio.
+- **Fecha:** 2026-11-16.
+- **Estado:** abierto.
+
 ## Riesgo bajo
 
 ### 5. Workflows programados de GitHub pueden retrasarse o desactivarse
@@ -75,6 +95,7 @@ Cuando un tema se resuelve, se cambia su estado a "cerrado" con la fecha.
 - **Riesgo:** bajo.
 - **Fecha:** 2026-11-16.
 - **Estado:** abierto.
+- **Avance (2026-11-17, sin verificar todavía):** en la rama `prueba/localidades` están los SQL de `supabase/datos/` (resumen, orden por población del municipio, carga desactivada y activación por tandas), que salen de la lista oficial. Se cierra cuando las zonas estén cargadas y verificadas.
 
 ### 7. Unos 70 resultados como máximo por búsqueda
 
@@ -114,4 +135,40 @@ Cuando un tema se resuelve, se cambia su estado a "cerrado" con la fecha.
 - **Por qué importa:** son las próximas mejoras planeadas.
 - **Riesgo:** bajo.
 - **Fecha:** 2026-11-16.
+- **Estado:** abierto.
+
+### 12. 7 localidades censales con nombre repetido no se cargan como zona
+
+- **Qué es:** en la lista oficial de Córdoba hay 7 nombres de localidades censales que existen en dos departamentos distintos (14 localidades): Corralito, La Puerta, Las Vertientes, Los Chañaritos, San Pedro, San Vicente y Villa Sarmiento.
+- **Por qué importa:** no se cargan como zona porque una búsqueda como "Kioscos en La Puerta, Córdoba" es ambigua para Google. Esas localidades quedan sin buscar.
+- **Qué hay que hacer:** si hacen falta, decidir cómo buscarlas sin ambigüedad (por ejemplo, agregando el departamento a la búsqueda, lo que cambia código de la cola).
+- **Riesgo:** bajo.
+- **Fecha:** 2026-11-16.
+- **Estado:** abierto.
+
+### 13. Copia fija del censo 2022 en el repo; reemplazar a mano si INDEC publica una corrección
+
+- **Qué es:** "Cargar localidades oficiales" lee la población por municipio de una copia fija del CSV del Censo 2022 (INDEC) guardada en `scraper/datos/` (ver `scraper/datos/LEEME.md`), porque censo.gob.ar manda su certificado incompleto y la descarga automática falla.
+- **Por qué importa:** si INDEC publica una versión corregida, la copia queda vieja y el orden de las zonas usa números desactualizados. El archivo actual ya dice que INDEC lo reemplazó el 03/06/2026.
+- **Qué hay que hacer:** reemplazar el archivo a mano (mismo nombre) cuando haya una corrección y actualizar la fecha en el LEEME.
+- **Riesgo:** bajo.
+- **Fecha:** 2026-11-17.
+- **Estado:** abierto.
+
+### 14. Localidad "Paraje" en el panel: revisar si es un nombre real o un resto de antes de la regla nueva
+
+- **Qué es:** en el desplegable de Localidad del panel aparece "Paraje".
+- **Por qué importa:** si no es una localidad real, ensucia el filtro igual que los códigos postales que se repararon.
+- **Qué hay que hacer:** revisarlo con una consulta de solo lectura (cuántos leads la tienen, de qué provincia y de qué fuente) y decidir con Mauro si se corrige.
+- **Riesgo:** bajo.
+- **Fecha:** 2026-11-17.
+- **Estado:** abierto.
+
+### 15. docs/DECISIONES.md no existe aunque la constitución manda leerlo
+
+- **Qué es:** las instrucciones de trabajo piden leer `docs/DECISIONES.md` antes de empezar, pero ese archivo no existe en el repo.
+- **Por qué importa:** las decisiones ya tomadas (por ejemplo, la opción 2 de localidad o la copia fija del censo) quedan repartidas en los informes y no en un solo lugar.
+- **Qué hay que hacer:** decidir con Mauro si se crea el archivo o si se saca esa regla de las instrucciones.
+- **Riesgo:** bajo.
+- **Fecha:** 2026-11-17.
 - **Estado:** abierto.

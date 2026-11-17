@@ -18,6 +18,14 @@
 //       se usa (opción 2, decidida por Mauro): esa parte puede ser un
 //       barrio escrito sin "B°" y es mejor dejar la localidad vacía.
 // 3. Ante la duda, vacía: no se inventa.
+//
+// Con lista oficial (tabla localidades_oficiales, Georef / INDEC) para la
+// provincia del lead, la lista manda (decisión de Mauro, Parada 1):
+// - cada candidato (la "city" sin código postal, y después el de la
+//   dirección) se acepta solo si está en la lista de esa provincia, y se
+//   guarda con el nombre oficial ("Cordoba" -> "Córdoba");
+// - si ningún candidato está en la lista, la localidad queda vacía.
+// Sin lista para esa provincia se usa la regla de arriba, como antes.
 
 /** Código postal argentino: CPA (X5000AVJ), corto (X5000) o numérico (5000). */
 const CODIGO_POSTAL = /^[A-Za-z]?\d{4}(?:[A-Za-z]{3})?$/;
@@ -82,14 +90,14 @@ function esProvincia(parte: string, provincia: string | null | undefined): boole
 }
 
 /**
- * Saca la localidad de la dirección escrita, o null si no queda claro.
- * permitirSinCodigo: si es true, cuando la dirección no tiene código postal
- * se usa la parte justo antes de la provincia (paso b). Por defecto, no.
+ * Parte de la dirección donde debería estar la localidad (sin limpiar), o
+ * null. permitirSinCodigo: si es true, cuando la dirección no tiene código
+ * postal se usa la parte justo antes de la provincia (paso b).
  */
-export function localidadDesdeDireccion(
+function candidatoDesdeDireccion(
   direccion: string | null | undefined,
   provincia: string | null | undefined,
-  permitirSinCodigo = false,
+  permitirSinCodigo: boolean,
 ): string | null {
   if (typeof direccion !== 'string') return null;
   const partes = direccion.split(',').map(limpiar).filter((p) => p !== '');
@@ -100,26 +108,67 @@ export function localidadDesdeDireccion(
   // a. La parte con código postal es la de la localidad.
   for (let i = partes.length - 1; i >= 1; i--) {
     const { resto, teniaCodigo } = sinCodigoPostal(partes[i] ?? '');
-    if (teniaCodigo) return limpiarLocalidad(resto);
+    if (teniaCodigo) return resto;
   }
 
   // b. Sin código postal: la parte justo antes de la provincia (solo si se permite).
   const ultima = partes.length - 1;
   if (permitirSinCodigo && partes.length >= 3 && esProvincia(partes[ultima] ?? '', provincia)) {
-    return limpiarLocalidad(partes[ultima - 1]);
+    return partes[ultima - 1] ?? null;
   }
   return null;
+}
+
+/**
+ * Saca la localidad de la dirección escrita, o null si no queda claro.
+ * permitirSinCodigo: si es true, cuando la dirección no tiene código postal
+ * se usa la parte justo antes de la provincia (paso b). Por defecto, no.
+ */
+export function localidadDesdeDireccion(
+  direccion: string | null | undefined,
+  provincia: string | null | undefined,
+  permitirSinCodigo = false,
+): string | null {
+  const candidato = candidatoDesdeDireccion(direccion, provincia, permitirSinCodigo);
+  return candidato === null ? null : limpiarLocalidad(candidato);
+}
+
+/** Lista oficial de localidades por provincia (ver localidades/lista.ts). */
+export interface ListaLocalidades {
+  /** true si hay lista oficial cargada para esa provincia. */
+  tieneLista(provincia: string | null | undefined): boolean;
+  /** Nombre oficial si el nombre está en la lista de esa provincia; si no, null. */
+  oficial(nombre: string, provincia: string | null | undefined): string | null;
 }
 
 /**
  * Localidad final: la de Google si sirve; si no, la de la dirección; si no,
  * null. La parte antes de la provincia (paso b) solo se usa si "city" vino vacía.
  */
-export function elegirLocalidad(datos: {
-  city: string | null | undefined;
-  direccion: string | null | undefined;
-  provincia: string | null | undefined;
-}): string | null {
+export function elegirLocalidad(
+  datos: {
+    city: string | null | undefined;
+    direccion: string | null | undefined;
+    provincia: string | null | undefined;
+  },
+  lista?: ListaLocalidades,
+): string | null {
   const cityVacia = typeof datos.city !== 'string' || datos.city.trim() === '';
+
+  if (lista?.tieneLista(datos.provincia)) {
+    const candidatos = [
+      cityVacia ? null : (datos.city ?? null),
+      candidatoDesdeDireccion(datos.direccion, datos.provincia, cityVacia),
+    ];
+    for (const candidato of candidatos) {
+      if (candidato === null) continue;
+      const { resto } = sinCodigoPostal(candidato);
+      if (resto === '') continue;
+      const oficial = lista.oficial(resto, datos.provincia);
+      if (oficial !== null) return oficial;
+    }
+    return null;
+  }
+
   return limpiarLocalidad(datos.city) ?? localidadDesdeDireccion(datos.direccion, datos.provincia, cityVacia);
 }

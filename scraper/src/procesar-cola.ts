@@ -24,6 +24,9 @@ import { setTimeout as esperar } from 'node:timers/promises';
 import { cerrarCorrida, crearCliente, crearCorrida } from './importacion/base.js';
 import { codigoDeErrorSeguro } from './importacion/decision.js';
 import { importarCsv } from './importacion/importar-csv.js';
+import type { ListaLocalidades } from './limpieza/localidad.js';
+import { leerListaLocalidades } from './localidades/base-localidades.js';
+import { LISTA_VACIA } from './localidades/lista.js';
 import { actualizarPendiente, leerPendientesTomables, leerRubros, leerZonas, marcarInterrumpidas, tomarPendiente } from './cola/base-cola.js';
 import { leerConfiguracionProcesar } from './cola/configuracion-cola.js';
 import { archivosDeBusqueda, correrGosom } from './cola/gosom.js';
@@ -80,16 +83,17 @@ async function principal(): Promise<number> {
   let rubros: Rubro[] = [];
   let zonas: Zona[] = [];
   let tareas: Tarea[] = [];
+  let listaLocalidades: ListaLocalidades = LISTA_VACIA;
 
   // 2. Limpiar restos de una corrida cortada y leer la cola
   try {
     interrumpidas = await marcarInterrumpidas(db, ahora());
-    [rubros, zonas] = await Promise.all([leerRubros(db), leerZonas(db)]);
+    [rubros, zonas, listaLocalidades] = await Promise.all([leerRubros(db), leerZonas(db), leerListaLocalidades(db)]);
     tareas = ordenarCola(await leerPendientesTomables(db), rubros, zonas);
   } catch (error) {
     fatal = true;
     codigoError = codigoDeErrorSeguro(error);
-    console.log(`ERROR: no se pudo leer la cola (codigo ${codigoError}).`);
+    console.log(`ERROR: no se pudo leer la cola o las localidades oficiales (codigo ${codigoError}).`);
   }
   console.log(`Pendientes interrumpidos de una corrida anterior (pasan a error): ${interrumpidas}`);
   console.log(`Pendientes para hacer al empezar: ${tareas.length}`);
@@ -138,7 +142,7 @@ async function principal(): Promise<number> {
     const senales = contarSenales(log);
     log = '';
 
-    const importacion = await importarCsv(db, archivos.csv, tarea.rubro.id);
+    const importacion = await importarCsv(db, archivos.csv, tarea.rubro.id, listaLocalidades);
     const c = importacion.contadores;
     const r = resultadoDeBusqueda({
       senalesFuertes: totalSenales(senales, 'fuerte'),
