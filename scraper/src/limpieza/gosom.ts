@@ -17,6 +17,7 @@
 // No se inventan datos: lo que no se puede leer queda vacío.
 
 import { limpiarEmail } from './emails.js';
+import { elegirLocalidad } from './localidad.js';
 import { linkWhatsapp, normalizarTelefono } from './telefonos.js';
 import type { Fuentes, Lead } from './tipos.js';
 import { puntoDe } from './ubicacion.js';
@@ -93,16 +94,22 @@ export function mapearFilaGosom(fila: FilaGosom): Lead | null {
     anotar('direccion');
   }
 
-  // Localidad, provincia y país desde la dirección completa (si viene)
+  // Localidad, provincia y país desde la dirección completa (si viene).
+  // La localidad de Google a veces es un código postal: se valida y, si no
+  // sirve, se saca de la dirección escrita (ver localidad.ts).
   const completa = leerDireccionCompleta(fila['complete_address']);
+  const localidad = elegirLocalidad({
+    city: texto(completa?.city),
+    direccion: lead.direccion,
+    provincia: texto(completa?.state),
+  });
+  if (localidad) {
+    lead.localidad = localidad;
+    anotar('localidad');
+  }
   if (completa) {
-    const localidad = texto(completa.city);
     const provincia = texto(completa.state);
     const codigoPais = texto(completa.country)?.toUpperCase();
-    if (localidad) {
-      lead.localidad = localidad;
-      anotar('localidad');
-    }
     if (provincia) {
       lead.provincia = provincia;
       anotar('provincia');
