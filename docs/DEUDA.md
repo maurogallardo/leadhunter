@@ -17,6 +17,7 @@ Cuando un tema se resuelve, se cambia su estado a "cerrado" con la fecha.
 | 9 | Etapas 6b y 6c: exportación diaria y descarga automática | bajo | 2026-11-16 | abierto |
 | 10 | Etapas futuras (7 a 10) | bajo | 2026-11-16 | abierto |
 | 12 | 7 localidades censales con nombre repetido no se cargan como zona | bajo | 2026-11-16 | abierto |
+| 13 | Copia fija del censo 2022 en el repo; reemplazar a mano si INDEC publica una corrección | bajo | 2026-11-17 | abierto |
 
 ---
 
@@ -140,4 +141,13 @@ Cuando un tema se resuelve, se cambia su estado a "cerrado" con la fecha.
 - **Qué hay que hacer:** si hacen falta, decidir cómo buscarlas sin ambigüedad (por ejemplo, agregando el departamento a la búsqueda, lo que cambia código de la cola).
 - **Riesgo:** bajo.
 - **Fecha:** 2026-11-16.
+- **Estado:** abierto.
+
+### 13. Copia fija del censo 2022 en el repo; reemplazar a mano si INDEC publica una corrección
+
+- **Qué es:** "Cargar localidades oficiales" lee la población por municipio de una copia fija del CSV del Censo 2022 (INDEC) guardada en `scraper/datos/` (ver `scraper/datos/LEEME.md`), porque censo.gob.ar manda su certificado incompleto y la descarga automática falla.
+- **Por qué importa:** si INDEC publica una versión corregida, la copia queda vieja y el orden de las zonas usa números desactualizados. El archivo actual ya dice que INDEC lo reemplazó el 03/06/2026.
+- **Qué hay que hacer:** reemplazar el archivo a mano (mismo nombre) cuando haya una corrección y actualizar la fecha en el LEEME.
+- **Riesgo:** bajo.
+- **Fecha:** 2026-11-17.
 - **Estado:** abierto.

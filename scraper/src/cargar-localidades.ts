@@ -1,6 +1,7 @@
 // "Cargar localidades oficiales": baja de la API Georef (datos.gob.ar,
 // fuente INDEC) las localidades y las localidades censales de Córdoba, y
-// la población por municipio del Censo 2022 (INDEC). Las guarda en
+// lee la población por municipio del Censo 2022 (INDEC) de la copia fija
+// del repo (scraper/datos/, ver LEEME.md). Las guarda en
 // public.localidades_oficiales (migración 0005).
 // Se corre en GitHub Actions (workflow "Cargar localidades oficiales").
 //
@@ -14,6 +15,7 @@
 import { crearCliente } from './importacion/base.js';
 import { codigoDeErrorSeguro } from './importacion/decision.js';
 import { guardarLocalidades, leerClavesExistentes } from './localidades/base-localidades.js';
+import { leerCopiaCenso } from './localidades/censo.js';
 import { codigoDeCausa, describirErrorDescarga, ErrorDescarga, type FuenteDescarga } from './localidades/descarga.js';
 import { leerConfiguracionLocalidades } from './localidades/modo.js';
 import {
@@ -29,8 +31,6 @@ import {
 const PROVINCIA_CORDOBA = '14';
 const GEOREF = 'https://apis.datos.gob.ar/georef/api';
 const ENDPOINT: Record<TipoLocalidad, string> = { localidad: 'localidades', localidad_censal: 'localidades-censales' };
-/** Censo 2022, población por gobierno local (todo el país), INDEC. */
-const CENSO_GOBIERNO_LOCAL = 'https://censo.gob.ar/wp-content/uploads/2024/07/c2022_tp_gobierno_local_c1.csv';
 const ESPERA_MS = 60_000;
 
 /**
@@ -63,16 +63,24 @@ async function principal(): Promise<number> {
   let jsonCensales: unknown;
   let csvCenso: string;
   // Se intentan las tres y se informa CADA una que falle.
+  // El censo se lee de la copia fija del repo (no de internet).
+  const leerCenso = async (): Promise<string> => {
+    try {
+      return leerCopiaCenso();
+    } catch (error) {
+      throw new ErrorDescarga('censo', 'lectura del censo', codigoDeCausa(error));
+    }
+  };
   const descargas = await Promise.allSettled([
     bajar(urlGeoref('localidad'), 'json', 'georef', 'descarga de localidades'),
     bajar(urlGeoref('localidad_censal'), 'json', 'georef', 'descarga de localidades censales'),
-    bajar(CENSO_GOBIERNO_LOCAL, 'texto', 'censo', 'descarga del censo'),
+    leerCenso(),
   ]);
   const fallas = descargas.flatMap((d) => (d.status === 'rejected' ? [d.reason] : []));
   if (fallas.length > 0) {
     for (const falla of fallas) {
       const detalle = falla instanceof ErrorDescarga ? describirErrorDescarga(falla) : `causa: ${codigoDeErrorSeguro(falla)}`;
-      console.log(`ERROR: no se pudo bajar una fuente (${detalle}).`);
+      console.log(`ERROR: no se pudo obtener una fuente (${detalle}).`);
     }
     return 1;
   }
