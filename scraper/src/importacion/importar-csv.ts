@@ -18,6 +18,7 @@ import {
   leadAFilaActualizacion,
 } from './decision.js';
 import { FUENTE_GOSOM, mapearFilaGosom } from '../limpieza/gosom.js';
+import type { ListaLocalidades } from '../limpieza/localidad.js';
 
 /** Si fallan tantas filas seguidas, se corta (probablemente la base no responde). */
 export const MAXIMO_ERRORES_SEGUIDOS = 5;
@@ -30,8 +31,16 @@ export interface ResultadoImportacion {
   codigoError: string | null;
 }
 
-/** Importa el CSV de rutaCsv con el rubro indicado. Si el archivo no existe, cuenta 0 filas. */
-export async function importarCsv(db: SupabaseClient, rutaCsv: string, rubroId: string): Promise<ResultadoImportacion> {
+/**
+ * Importa el CSV de rutaCsv con el rubro indicado. Si el archivo no existe, cuenta 0 filas.
+ * listaLocalidades: lista oficial para validar la localidad (ver limpieza/localidad.ts).
+ */
+export async function importarCsv(
+  db: SupabaseClient,
+  rutaCsv: string,
+  rubroId: string,
+  listaLocalidades?: ListaLocalidades,
+): Promise<ResultadoImportacion> {
   let contadores = contadoresIniciales();
   let fatal = false;
   let codigoError: string | null = null;
@@ -44,7 +53,7 @@ export async function importarCsv(db: SupabaseClient, rutaCsv: string, rubroId: 
     for (const fila of filas) {
       contadores = { ...contadores, filasLeidas: contadores.filasLeidas + 1 };
 
-      const lead = mapearFilaGosom(fila);
+      const lead = mapearFilaGosom(fila, listaLocalidades);
       if (!lead) {
         contadores = { ...contadores, filasSinNombre: contadores.filasSinNombre + 1 };
         continue;

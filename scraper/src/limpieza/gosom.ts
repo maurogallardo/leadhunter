@@ -17,7 +17,7 @@
 // No se inventan datos: lo que no se puede leer queda vacío.
 
 import { limpiarEmail } from './emails.js';
-import { elegirLocalidad } from './localidad.js';
+import { elegirLocalidad, type ListaLocalidades } from './localidad.js';
 import { linkWhatsapp, normalizarTelefono } from './telefonos.js';
 import type { Fuentes, Lead } from './tipos.js';
 import { puntoDe } from './ubicacion.js';
@@ -36,8 +36,12 @@ interface DireccionCompleta {
 /** Códigos de país que sabemos traducir. */
 const PAISES: Record<string, string> = { AR: 'Argentina' };
 
-/** Devuelve el lead, o null si la fila no tiene nombre. */
-export function mapearFilaGosom(fila: FilaGosom): Lead | null {
+/**
+ * Devuelve el lead, o null si la fila no tiene nombre.
+ * lista: lista oficial de localidades; si la provincia la tiene, la localidad
+ * solo se acepta si está en ella (ver localidad.ts).
+ */
+export function mapearFilaGosom(fila: FilaGosom, lista?: ListaLocalidades): Lead | null {
   const nombre = texto(fila['title']);
   if (!nombre) return null;
 
@@ -98,11 +102,14 @@ export function mapearFilaGosom(fila: FilaGosom): Lead | null {
   // La localidad de Google a veces es un código postal: se valida y, si no
   // sirve, se saca de la dirección escrita (ver localidad.ts).
   const completa = leerDireccionCompleta(fila['complete_address']);
-  const localidad = elegirLocalidad({
-    city: texto(completa?.city),
-    direccion: lead.direccion,
-    provincia: texto(completa?.state),
-  });
+  const localidad = elegirLocalidad(
+    {
+      city: texto(completa?.city),
+      direccion: lead.direccion,
+      provincia: texto(completa?.state),
+    },
+    lista,
+  );
   if (localidad) {
     lead.localidad = localidad;
     anotar('localidad');

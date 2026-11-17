@@ -22,6 +22,8 @@ import {
   lineasDeResumen,
 } from './importacion/decision.js';
 import { importarCsv } from './importacion/importar-csv.js';
+import type { ListaLocalidades } from './limpieza/localidad.js';
+import { leerListaLocalidades } from './localidades/base-localidades.js';
 
 async function principal(): Promise<number> {
   const resultado = leerConfiguracion(process.env);
@@ -45,6 +47,15 @@ async function principal(): Promise<number> {
     return 1;
   }
 
+  // 1b. Lista oficial de localidades (para validar la localidad de cada lead)
+  let listaLocalidades: ListaLocalidades;
+  try {
+    listaLocalidades = await leerListaLocalidades(db);
+  } catch (error) {
+    console.log(`ERROR: no se pudo leer la tabla localidades_oficiales (codigo ${codigoDeErrorSeguro(error)}).`);
+    return 1;
+  }
+
   // 2. Registrar la corrida
   let corridaId: string;
   try {
@@ -55,7 +66,7 @@ async function principal(): Promise<number> {
   }
 
   // 3. Procesar el CSV (mismo núcleo que usa la cola)
-  const { contadores, fatal, codigoError } = await importarCsv(db, config.rutaCsv, rubroId);
+  const { contadores, fatal, codigoError } = await importarCsv(db, config.rutaCsv, rubroId, listaLocalidades);
 
   // 4. Cerrar la corrida
   const bloqueo = hayBloqueo(config.palabrasDeBloqueo, contadores.filasLeidas);

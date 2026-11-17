@@ -2,6 +2,8 @@
 // secreta del servidor. Sin lógica: solo consultas. No imprime nada.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ListaLocalidades } from '../limpieza/localidad.js';
+import { crearListaLocalidades } from './lista.js';
 import { claveFila, type FilaLocalidadOficial } from './oficiales.js';
 
 const TABLA = 'localidades_oficiales';
@@ -65,4 +67,9 @@ export async function leerLocalidadesParaValidar(db: SupabaseClient): Promise<Lo
         ]
       : [],
   );
+}
+
+/** Lista oficial lista para validar (vacía si la tabla no tiene filas). */
+export async function leerListaLocalidades(db: SupabaseClient): Promise<ListaLocalidades> {
+  return crearListaLocalidades(await leerLocalidadesParaValidar(db));
 }
