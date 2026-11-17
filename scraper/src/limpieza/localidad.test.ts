@@ -62,20 +62,29 @@ describe('localidadDesdeDireccion', () => {
     expect(localidadDesdeDireccion('Calle Falsa 123, B° Inventado, X5000AVJ Córdoba', 'Córdoba')).toBe('Córdoba');
   });
 
-  it('sin código postal: la parte antes de la provincia', () => {
-    expect(localidadDesdeDireccion('Calle Falsa 123, Villa Allende, Córdoba', 'Córdoba')).toBe('Villa Allende');
-    expect(localidadDesdeDireccion('Calle Falsa 123, La Calera, Provincia de Córdoba, Argentina', 'Córdoba')).toBe('La Calera');
-    expect(localidadDesdeDireccion('Calle Falsa 123, Córdoba, Cordoba', 'Córdoba')).toBe('Córdoba');
+  it('sin código postal y permitido: la parte antes de la provincia', () => {
+    expect(localidadDesdeDireccion('Calle Falsa 123, Villa Allende, Córdoba', 'Córdoba', true)).toBe('Villa Allende');
+    expect(localidadDesdeDireccion('Calle Falsa 123, La Calera, Provincia de Córdoba, Argentina', 'Córdoba', true)).toBe('La Calera');
+    expect(localidadDesdeDireccion('Calle Falsa 123, Córdoba, Cordoba', 'Córdoba', true)).toBe('Córdoba');
   });
 
-  it('sin código postal y la parte antes de la provincia es un barrio -> null', () => {
-    expect(localidadDesdeDireccion('Calle Falsa 123, B° Inventado, Córdoba', 'Córdoba')).toBeNull();
+  it('sin código postal y NO permitido (por defecto) -> null', () => {
+    expect(localidadDesdeDireccion('Calle Falsa 123, Villa Allende, Córdoba', 'Córdoba')).toBeNull();
+    expect(localidadDesdeDireccion('Calle Falsa 123, Villa Allende, Córdoba', 'Córdoba', false)).toBeNull();
+  });
+
+  it('con código postal no hace falta permiso', () => {
+    expect(localidadDesdeDireccion('Calle Falsa 123, X5105 Villa Allende, Córdoba', 'Córdoba', false)).toBe('Villa Allende');
+  });
+
+  it('sin código postal y la parte antes de la provincia es un barrio con "B°" -> null', () => {
+    expect(localidadDesdeDireccion('Calle Falsa 123, B° Inventado, Córdoba', 'Córdoba', true)).toBeNull();
   });
 
   it('ante la duda, null', () => {
     expect(localidadDesdeDireccion('Calle Falsa 123', 'Córdoba')).toBeNull(); // solo calle
     expect(localidadDesdeDireccion('Calle Falsa 123, Villa Allende', 'Córdoba')).toBeNull(); // sin provincia ni código
-    expect(localidadDesdeDireccion('Calle Falsa 123, Villa Allende, Córdoba', null)).toBeNull(); // provincia desconocida
+    expect(localidadDesdeDireccion('Calle Falsa 123, Villa Allende, Córdoba', null, true)).toBeNull(); // provincia desconocida
     expect(localidadDesdeDireccion('Calle Falsa 123, X5000AVJ, Santa Fe', 'Córdoba')).toBeNull(); // el código está solo
     expect(localidadDesdeDireccion('', 'Córdoba')).toBeNull();
     expect(localidadDesdeDireccion(null, 'Córdoba')).toBeNull();
@@ -105,6 +114,19 @@ describe('elegirLocalidad', () => {
     );
   });
 
+  it('opción 2: si la city vino con código o pedazo, NO se usa la parte antes de la provincia', () => {
+    const sinCodigo = 'Calle Falsa 123, Villa Allende, Córdoba';
+    expect(elegirLocalidad({ city: 'FDC', direccion: sinCodigo, provincia: 'Córdoba' })).toBeNull();
+    expect(elegirLocalidad({ city: 'X5000AVJ', direccion: sinCodigo, provincia: 'Córdoba' })).toBeNull();
+    expect(elegirLocalidad({ city: '5000', direccion: sinCodigo, provincia: 'Córdoba' })).toBeNull();
+  });
+
+  it('city con espacios solamente cuenta como vacía', () => {
+    expect(elegirLocalidad({ city: '   ', direccion: 'Calle Falsa 123, Villa Allende, Córdoba', provincia: 'Córdoba' })).toBe(
+      'Villa Allende',
+    );
+  });
+
   it('si ninguna sirve, null (no se inventa)', () => {
     expect(elegirLocalidad({ city: 'KQD', direccion: 'Calle Falsa 123', provincia: 'Córdoba' })).toBeNull();
   });
@@ -121,6 +143,24 @@ describe('mapearFilaGosom usa la regla nueva', () => {
     });
     expect(lead?.localidad).toBe('Córdoba');
     expect(lead?.fuentes['localidad']).toEqual(['gosom']);
+  });
+
+  it('city con pedazo de CPA y dirección sin código -> sin localidad (opción 2)', () => {
+    const lead = mapearFilaGosom({
+      title: 'Almacén Inventado',
+      address: 'Calle Falsa 123, Villa Allende, Córdoba',
+      complete_address: completa('AES'),
+    });
+    expect(lead?.localidad).toBeUndefined();
+  });
+
+  it('city vacía y dirección sin código -> la parte antes de la provincia', () => {
+    const lead = mapearFilaGosom({
+      title: 'Almacén Inventado',
+      address: 'Calle Falsa 123, Villa Allende, Córdoba',
+      complete_address: completa(''),
+    });
+    expect(lead?.localidad).toBe('Villa Allende');
   });
 
   it('city con pedazo de CPA y dirección sin datos -> sin localidad', () => {

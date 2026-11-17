@@ -11,9 +11,12 @@
 // 2. Si "city" está vacía o no sirve, se saca de la dirección escrita:
 //    a. la parte que tiene el código postal adelante o atrás es la de la
 //       localidad ("Calle 123, X5000AVJ Córdoba" -> "Córdoba");
-//    b. si no hay código postal, la parte justo antes de la provincia
-//       ("Calle 123, Villa Allende, Córdoba" -> "Villa Allende"), solo si
-//       la dirección tiene calle, localidad y provincia.
+//    b. si no hay código postal Y "city" vino VACÍA, la parte justo antes
+//       de la provincia ("Calle 123, Villa Allende, Córdoba" ->
+//       "Villa Allende"), solo si la dirección tiene calle, localidad y
+//       provincia. Si "city" vino con un código o un pedazo, este paso NO
+//       se usa (opción 2, decidida por Mauro): esa parte puede ser un
+//       barrio escrito sin "B°" y es mejor dejar la localidad vacía.
 // 3. Ante la duda, vacía: no se inventa.
 
 /** Código postal argentino: CPA (X5000AVJ), corto (X5000) o numérico (5000). */
@@ -78,10 +81,15 @@ function esProvincia(parte: string, provincia: string | null | undefined): boole
   return x === p;
 }
 
-/** Saca la localidad de la dirección escrita, o null si no queda claro. */
+/**
+ * Saca la localidad de la dirección escrita, o null si no queda claro.
+ * permitirSinCodigo: si es true, cuando la dirección no tiene código postal
+ * se usa la parte justo antes de la provincia (paso b). Por defecto, no.
+ */
 export function localidadDesdeDireccion(
   direccion: string | null | undefined,
   provincia: string | null | undefined,
+  permitirSinCodigo = false,
 ): string | null {
   if (typeof direccion !== 'string') return null;
   const partes = direccion.split(',').map(limpiar).filter((p) => p !== '');
@@ -95,19 +103,23 @@ export function localidadDesdeDireccion(
     if (teniaCodigo) return limpiarLocalidad(resto);
   }
 
-  // b. Sin código postal: la parte justo antes de la provincia.
+  // b. Sin código postal: la parte justo antes de la provincia (solo si se permite).
   const ultima = partes.length - 1;
-  if (partes.length >= 3 && esProvincia(partes[ultima] ?? '', provincia)) {
+  if (permitirSinCodigo && partes.length >= 3 && esProvincia(partes[ultima] ?? '', provincia)) {
     return limpiarLocalidad(partes[ultima - 1]);
   }
   return null;
 }
 
-/** Localidad final: la de Google si sirve; si no, la de la dirección; si no, null. */
+/**
+ * Localidad final: la de Google si sirve; si no, la de la dirección; si no,
+ * null. La parte antes de la provincia (paso b) solo se usa si "city" vino vacía.
+ */
 export function elegirLocalidad(datos: {
   city: string | null | undefined;
   direccion: string | null | undefined;
   provincia: string | null | undefined;
 }): string | null {
-  return limpiarLocalidad(datos.city) ?? localidadDesdeDireccion(datos.direccion, datos.provincia);
+  const cityVacia = typeof datos.city !== 'string' || datos.city.trim() === '';
+  return limpiarLocalidad(datos.city) ?? localidadDesdeDireccion(datos.direccion, datos.provincia, cityVacia);
 }
