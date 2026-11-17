@@ -9,12 +9,14 @@ Cuando un tema se resuelve, se cambia su estado a "cerrado" con la fecha.
 | 2 | Sin copias automáticas en el plan Free de Supabase | medio | 2026-11-16 | abierto |
 | 3 | Claves y contraseñas a renovar | medio | 2026-11-16 | abierto |
 | 4 | Bloqueo de Google y relanzamiento sin verificar en un caso real | medio | 2026-11-16 | abierto |
+| 11 | La regla de "dos búsquedas seguidas sin resultados" frena la cola en pueblos chicos | medio | 2026-11-16 | abierto |
 | 5 | Workflows programados de GitHub pueden retrasarse o desactivarse | bajo | 2026-11-16 | abierto |
 | 6 | Faltan zonas de Córdoba fuera de la capital | bajo | 2026-11-16 | abierto |
 | 7 | Unos 70 resultados como máximo por búsqueda | bajo | 2026-11-16 | abierto |
 | 8 | Datos de baja calidad | bajo | 2026-11-16 | abierto |
 | 9 | Etapas 6b y 6c: exportación diaria y descarga automática | bajo | 2026-11-16 | abierto |
 | 10 | Etapas futuras (7 a 10) | bajo | 2026-11-16 | abierto |
+| 12 | 7 localidades censales con nombre repetido no se cargan como zona | bajo | 2026-11-16 | abierto |
 
 ---
 
@@ -28,6 +30,11 @@ Cuando un tema se resuelve, se cambia su estado a "cerrado" con la fecha.
 - **Riesgo:** medio.
 - **Fecha:** 2026-11-16.
 - **Estado:** abierto.
+- **Avance (2026-11-17, sin verificar todavía):**
+  - La causa real no es una regla nuestra sobre la dirección: gosom toma la localidad ("city") de una posición fija de los datos de Google, que a veces trae el código postal.
+  - Regla nueva en el scraper (commits f143dbb y adc5935 en main).
+  - En la rama `prueba/localidades`: validación contra la lista oficial (Georef / INDEC, tabla `localidades_oficiales`) y el workflow "Reparar localidades".
+  - Se cierra recién cuando la reparación esté aplicada y verificada (vista previa, aplicar y filtro del panel sin códigos).
 
 ### 2. Sin copias automáticas en el plan Free de Supabase
 
@@ -56,6 +63,15 @@ Cuando un tema se resuelve, se cambia su estado a "cerrado" con la fecha.
 - **Fecha:** 2026-11-16.
 - **Estado:** abierto.
 
+### 11. La regla de "dos búsquedas seguidas sin resultados" frena la cola en pueblos chicos
+
+- **Qué es:** "Procesar cola" toma como bloqueo de Google dos búsquedas seguidas con 0 resultados. En localidades chicas es normal que varios rubros den 0 resultados seguidos.
+- **Por qué importa:** con las zonas de toda Córdoba, la cola se frenaría seguido sin que haya bloqueo real, y cada vez hay que relanzarla a mano.
+- **Qué hay que hacer:** decidir cómo tratar esa regla ANTES de activar zonas chicas (las zonas de Córdoba se cargan desactivadas y se activan por tandas).
+- **Riesgo:** medio.
+- **Fecha:** 2026-11-16.
+- **Estado:** abierto.
+
 ## Riesgo bajo
 
 ### 5. Workflows programados de GitHub pueden retrasarse o desactivarse
@@ -75,6 +91,7 @@ Cuando un tema se resuelve, se cambia su estado a "cerrado" con la fecha.
 - **Riesgo:** bajo.
 - **Fecha:** 2026-11-16.
 - **Estado:** abierto.
+- **Avance (2026-11-17, sin verificar todavía):** en la rama `prueba/localidades` están los SQL de `supabase/datos/` (resumen, orden por población del municipio, carga desactivada y activación por tandas), que salen de la lista oficial. Se cierra cuando las zonas estén cargadas y verificadas.
 
 ### 7. Unos 70 resultados como máximo por búsqueda
 
@@ -112,6 +129,15 @@ Cuando un tema se resuelve, se cambia su estado a "cerrado" con la fecha.
   - Etapa 9: fuentes OSM/Overture.
   - Etapa 10: búsqueda completa de Córdoba y otras provincias.
 - **Por qué importa:** son las próximas mejoras planeadas.
+- **Riesgo:** bajo.
+- **Fecha:** 2026-11-16.
+- **Estado:** abierto.
+
+### 12. 7 localidades censales con nombre repetido no se cargan como zona
+
+- **Qué es:** en la lista oficial de Córdoba hay 7 nombres de localidades censales que existen en dos departamentos distintos (14 localidades): Corralito, La Puerta, Las Vertientes, Los Chañaritos, San Pedro, San Vicente y Villa Sarmiento.
+- **Por qué importa:** no se cargan como zona porque una búsqueda como "Kioscos en La Puerta, Córdoba" es ambigua para Google. Esas localidades quedan sin buscar.
+- **Qué hay que hacer:** si hacen falta, decidir cómo buscarlas sin ambigüedad (por ejemplo, agregando el departamento a la búsqueda, lo que cambia código de la cola).
 - **Riesgo:** bajo.
 - **Fecha:** 2026-11-16.
 - **Estado:** abierto.
