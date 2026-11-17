@@ -1,0 +1,642 @@
+/* LeadHunter · panel. Claro y oscuro según el sistema. */
+
+:root {
+  --fondo: #f6f7f9;
+  --superficie: #ffffff;
+  --superficie-2: #f0f2f5;
+  --borde: #dfe3e8;
+  --texto: #16191d;
+  --texto-suave: #5d6670;
+  --acento: #1f6f5c;
+  --acento-texto: #ffffff;
+  --acento-suave: #e3f1ec;
+  --peligro: #b3261e;
+  --etiqueta: #8a5a00;
+  --etiqueta-fondo: #fff3d6;
+  --foco: #2b7fd9;
+  --radio: 8px;
+  --sombra: 0 1px 2px rgb(16 24 32 / 6%);
+  --fuente: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --fuente-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, monospace;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fondo: #111316;
+    --superficie: #1a1d21;
+    --superficie-2: #23272c;
+    --borde: #33383f;
+    --texto: #e8eaed;
+    --texto-suave: #9aa3ad;
+    --acento: #4fbf9f;
+    --acento-texto: #0d1a16;
+    --acento-suave: #173029;
+    --peligro: #ff8a80;
+    --etiqueta: #ffcf70;
+    --etiqueta-fondo: #3a2d10;
+    --foco: #7cb7ff;
+    --sombra: none;
+    color-scheme: dark;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+}
+
+body {
+  min-height: 100dvh;
+  background: var(--fondo);
+  color: var(--texto);
+  font: 15px/1.45 var(--fuente);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+p,
+ul,
+dl,
+dd {
+  margin: 0;
+}
+
+a {
+  color: var(--acento);
+}
+
+:focus-visible {
+  outline: 2px solid var(--foco);
+  outline-offset: 2px;
+}
+
+.solo-lectores {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.mono {
+  font-family: var(--fuente-mono);
+  font-size: 0.92em;
+  white-space: nowrap;
+}
+
+/* ---------- Botones y campos ---------- */
+
+.boton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.boton:hover {
+  background: var(--superficie-2);
+}
+
+.boton-principal {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: var(--acento-texto);
+}
+
+.boton-principal:hover {
+  background: var(--acento);
+  filter: brightness(1.08);
+}
+
+.boton-chico {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.boton-copiado {
+  background: var(--acento-suave);
+  border-color: var(--acento);
+  color: var(--acento);
+}
+
+.boton-error {
+  border-color: var(--peligro);
+  color: var(--peligro);
+}
+
+.boton:disabled,
+.deshabilitado {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
+}
+
+.botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.campo label {
+  font-size: 13px;
+  color: var(--texto-suave);
+}
+
+input[type='email'],
+input[type='password'],
+input[type='text'],
+input[type='search'],
+select {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+}
+
+/* Desplegable con flecha propia (triángulo SVG). */
+.select {
+  position: relative;
+}
+
+.select select {
+  appearance: none;
+  padding-right: 32px;
+  text-overflow: ellipsis;
+}
+
+.select-flecha {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  translate: 0 -50%;
+  color: var(--texto-suave);
+  pointer-events: none;
+}
+
+/* ---------- Login ---------- */
+
+.login {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: 24px 16px;
+}
+
+.login-caja {
+  width: 100%;
+  max-width: 360px;
+  padding: 28px 24px;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  background: var(--superficie);
+  box-shadow: var(--sombra);
+}
+
+.login-titulo {
+  font-size: 22px;
+}
+
+.login-sub {
+  margin: 4px 0 20px;
+  color: var(--texto-suave);
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.login-form .boton {
+  justify-content: center;
+  min-height: 40px;
+}
+
+.password {
+  position: relative;
+}
+
+.password input {
+  padding-right: 44px;
+}
+
+.ojo {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  translate: 0 -50%;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--texto-suave);
+  cursor: pointer;
+}
+
+.ojo:hover {
+  color: var(--texto);
+}
+
+.login-error {
+  min-height: 1.45em;
+  color: var(--peligro);
+  font-size: 14px;
+}
+
+/* ---------- Página de leads ---------- */
+
+.pagina {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 0 16px 32px;
+}
+
+.cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0;
+}
+
+.marca {
+  font-size: 18px;
+  letter-spacing: -0.01em;
+}
+
+.cargando,
+.vacio {
+  padding: 32px 0;
+  color: var(--texto-suave);
+  text-align: center;
+}
+
+.filtros {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  background: var(--superficie);
+  box-shadow: var(--sombra);
+}
+
+.filtros-busqueda {
+  display: flex;
+  gap: 8px;
+}
+
+.filtros-desplegables {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.filtros-interruptores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.interruptor {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.interruptor input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.interruptor-pista {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--borde);
+  transition: background 0.15s;
+}
+
+.interruptor-pista::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: translate 0.15s;
+}
+
+.interruptor input:checked + .interruptor-pista {
+  background: var(--acento);
+}
+
+.interruptor input:checked + .interruptor-pista::after {
+  translate: 14px 0;
+}
+
+.interruptor input:focus-visible + .interruptor-pista {
+  outline: 2px solid var(--foco);
+  outline-offset: 2px;
+}
+
+.limpiar {
+  align-self: flex-start;
+  font-size: 14px;
+}
+
+.resumen {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 16px 0 10px;
+  font-weight: 600;
+}
+
+/* Tabla (pantallas anchas) */
+
+/* Alto máximo: así la barra para correr de costado siempre está a la vista. */
+.tabla-contenedor {
+  max-height: calc(100dvh - 140px);
+  overflow: auto;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  background: var(--superficie);
+  box-shadow: var(--sombra);
+}
+
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.tabla th,
+.tabla td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--borde);
+  text-align: left;
+  vertical-align: top;
+}
+
+.tabla th {
+  position: sticky;
+  top: 0;
+  background: var(--superficie-2);
+  color: var(--texto-suave);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tabla tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.tabla .num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tabla .nombre {
+  min-width: 200px;
+}
+
+/* Encabezado y columna Nombre fijos al correr la tabla. */
+.tabla th {
+  z-index: 1;
+}
+
+.tabla th:first-child,
+.tabla td.nombre {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--superficie);
+  box-shadow: 1px 0 0 var(--borde);
+}
+
+.tabla th:first-child {
+  z-index: 3;
+  background: var(--superficie-2);
+}
+
+.cortar {
+  min-width: 16ch;
+  max-width: 240px;
+  overflow-wrap: anywhere;
+}
+
+.tabla .botones {
+  min-width: 190px;
+}
+
+.tabla .sin-clasificar .botones {
+  min-width: 150px;
+}
+
+.nombre-texto {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.persona {
+  color: var(--texto-suave);
+  font-size: 13px;
+}
+
+.etiqueta {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--etiqueta-fondo);
+  color: var(--etiqueta);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.descartado strong {
+  color: var(--texto-suave);
+}
+
+.vacio-celda {
+  color: var(--texto-suave);
+}
+
+.resenas {
+  color: var(--texto-suave);
+  font-size: 12px;
+}
+
+.sin-clasificar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Tarjetas (pantallas chicas) */
+
+.tarjetas {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.tarjeta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  background: var(--superficie);
+  box-shadow: var(--sombra);
+}
+
+.tarjeta-cabeza {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tarjeta-rating {
+  flex: none;
+  font-weight: 600;
+}
+
+.tarjeta-sub {
+  color: var(--texto-suave);
+  font-size: 14px;
+}
+
+.tarjeta-datos {
+  display: grid;
+  gap: 8px;
+}
+
+.tarjeta-datos dt {
+  color: var(--texto-suave);
+  font-size: 12px;
+}
+
+.tarjeta-datos dd {
+  min-width: 0;
+}
+
+.tarjeta-datos dd.mono {
+  white-space: normal;
+}
+
+.tarjeta-datos .cortar {
+  max-width: none;
+}
+
+/* Paginación */
+
+.paginacion {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.paginacion-texto {
+  color: var(--texto-suave);
+  font-size: 14px;
+}
+
+/* Error */
+
+.error-pagina {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: 520px;
+  margin: 15vh auto 0;
+  padding: 0 16px;
+}
+
+.error-pagina h1 {
+  font-size: 20px;
+}
+
+/* ---------- Pantallas chicas: tarjetas en lugar de tabla ---------- */
+
+@media (max-width: 900px) {
+  .tabla-contenedor {
+    display: none;
+  }
+
+  .tarjetas {
+    display: flex;
+  }
+
+  .filtros-busqueda input {
+    min-width: 0;
+  }
+}
+
+.tarjeta-copiar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--borde);
+}
+
+.tarjeta-copiar > span {
+  color: var(--texto-suave);
+  font-size: 12px;
+}
