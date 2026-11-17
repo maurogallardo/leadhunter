@@ -1,0 +1,62 @@
+name: Reparar localidades
+
+# Solo se lanza a mano: GitHub -> Actions -> "Reparar localidades" -> Run workflow.
+# Corrige las localidades sospechosas ya guardadas en leads (códigos
+# postales como X5000AVJ, pedazos como AAU, números) usando la dirección
+# guardada y la lista oficial de localidades. Nunca toca localidades
+# cargadas a mano.
+# - vista_previa: solo cuenta, no cambia nada.
+# - aplicar: cambia (exige que la lista oficial de Córdoba esté cargada).
+# ANTES de aplicar: exportar la tabla leads (Supabase -> Table Editor -> leads -> Export -> CSV).
+# Solo imprime números. No sube archivos.
+on:
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: 'vista_previa (solo cuenta) o aplicar (cambia la base; exportá leads antes)'
+        required: true
+        type: choice
+        default: vista_previa
+        options:
+          - vista_previa
+          - aplicar
+
+permissions:
+  contents: read
+
+# Comparte fila con "Cargar localidades oficiales": nunca corren a la vez.
+concurrency:
+  group: leadhunter-localidades
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  reparar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Instalar Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26
+
+      - name: Instalar dependencias y compilar
+        working-directory: scraper
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+
+      # Única etapa con acceso a los secretos de Supabase.
+      # El modo se pasa por variable de entorno (nunca pegado en el script).
+      - name: Reparar localidades (solo imprime números)
+        working-directory: scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          MODO: ${{ inputs.modo }}
+        run: node dist/reparar-localidades.js
