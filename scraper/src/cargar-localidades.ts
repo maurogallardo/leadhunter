@@ -14,6 +14,7 @@
 import { crearCliente } from './importacion/base.js';
 import { codigoDeErrorSeguro } from './importacion/decision.js';
 import { guardarLocalidades, leerClavesExistentes } from './localidades/base-localidades.js';
+import { codigoDeCausa, describirErrorDescarga, ErrorDescarga, type FuenteDescarga } from './localidades/descarga.js';
 import { leerConfiguracionLocalidades } from './localidades/modo.js';
 import {
   agregarPoblacion,
@@ -32,10 +33,18 @@ const ENDPOINT: Record<TipoLocalidad, string> = { localidad: 'localidades', loca
 const CENSO_GOBIERNO_LOCAL = 'https://censo.gob.ar/wp-content/uploads/2024/07/c2022_tp_gobierno_local_c1.csv';
 const ESPERA_MS = 60_000;
 
-async function bajar(url: string, como: 'json' | 'texto'): Promise<unknown> {
-  const respuesta = await fetch(url, { signal: AbortSignal.timeout(ESPERA_MS), headers: { 'User-Agent': 'leadhunter-localidades' } });
-  if (!respuesta.ok) throw Object.assign(new Error('respuesta HTTP no exitosa'), { code: `HTTP_${respuesta.status}` });
-  return como === 'json' ? respuesta.json() : respuesta.text();
+/**
+ * Baja una fuente. Si falla, lanza ErrorDescarga con la etiqueta de la
+ * fuente, el paso y el código de causa (nunca la URL).
+ */
+async function bajar(url: string, como: 'json' | 'texto', fuente: FuenteDescarga, paso: string): Promise<unknown> {
+  try {
+    const respuesta = await fetch(url, { signal: AbortSignal.timeout(ESPERA_MS), headers: { 'User-Agent': 'leadhunter-localidades' } });
+    if (!respuesta.ok) throw Object.assign(new Error('respuesta HTTP no exitosa'), { code: `HTTP_${respuesta.status}` });
+    return await (como === 'json' ? respuesta.json() : respuesta.text());
+  } catch (error) {
+    throw new ErrorDescarga(fuente, paso, codigoDeCausa(error));
+  }
 }
 
 const urlGeoref = (tipo: TipoLocalidad): string =>
@@ -53,16 +62,25 @@ async function principal(): Promise<number> {
   let jsonLocalidades: unknown;
   let jsonCensales: unknown;
   let csvCenso: string;
-  try {
-    [jsonLocalidades, jsonCensales, csvCenso] = (await Promise.all([
-      bajar(urlGeoref('localidad'), 'json'),
-      bajar(urlGeoref('localidad_censal'), 'json'),
-      bajar(CENSO_GOBIERNO_LOCAL, 'texto'),
-    ])) as [unknown, unknown, string];
-  } catch (error) {
-    console.log(`ERROR: no se pudo bajar la lista oficial o el censo (codigo ${codigoDeErrorSeguro(error)}).`);
+  // Se intentan las tres y se informa CADA una que falle.
+  const descargas = await Promise.allSettled([
+    bajar(urlGeoref('localidad'), 'json', 'georef', 'descarga de localidades'),
+    bajar(urlGeoref('localidad_censal'), 'json', 'georef', 'descarga de localidades censales'),
+    bajar(CENSO_GOBIERNO_LOCAL, 'texto', 'censo', 'descarga del censo'),
+  ]);
+  const fallas = descargas.flatMap((d) => (d.status === 'rejected' ? [d.reason] : []));
+  if (fallas.length > 0) {
+    for (const falla of fallas) {
+      const detalle = falla instanceof ErrorDescarga ? describirErrorDescarga(falla) : `causa: ${codigoDeErrorSeguro(falla)}`;
+      console.log(`ERROR: no se pudo bajar una fuente (${detalle}).`);
+    }
     return 1;
   }
+  [jsonLocalidades, jsonCensales, csvCenso] = descargas.map((d) => (d.status === 'fulfilled' ? d.value : undefined)) as [
+    unknown,
+    unknown,
+    string,
+  ];
 
   // 2. Convertir y agregar población del municipio
   let filas;
